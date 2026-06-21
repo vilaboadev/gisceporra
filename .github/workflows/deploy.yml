@@ -28,7 +28,14 @@ jobs:
            TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
          run: |
            sed -i "s|// window.__FOOTBALL_DATA_TOKEN = 'EL_TEU_TOKEN_AQUI';|window.__FOOTBALL_DATA_TOKEN = '${TOKEN}';|" index.html
- 
+       - name: Inject Supabase config
+         env:
+           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+         run: |
+           sed -i "s|__SUPABASE_URL__|${SUPABASE_URL}|g" index.html
+           sed -i "s|__SUPABASE_ANON_KEY__|${SUPABASE_ANON_KEY}|g" index.html
+
        - uses: actions/configure-pages@v5
  
        - uses: actions/upload-pages-artifact@v3
