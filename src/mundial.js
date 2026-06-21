@@ -1,8 +1,32 @@
-const FD_API_BASE = 'https://api.football-data.org/v4';
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
+
+const ESPN_STATUS_MAP = {
+  STATUS_SCHEDULED: 'SCHEDULED',
+  STATUS_IN_PROGRESS: 'IN_PLAY',
+  STATUS_HALFTIME: 'PAUSED',
+  STATUS_FULL_TIME: 'FINISHED',
+  STATUS_FINAL_ET: 'FINISHED',
+  STATUS_FINAL_PEN: 'FINISHED',
+  STATUS_POSTPONED: 'POSTPONED',
+  STATUS_CANCELED: 'CANCELLED',
+  STATUS_SUSPENDED: 'POSTPONED',
+};
+
+const ESPN_SLUG_MAP = {
+  'group-stage': 'GROUP_STAGE',
+  'round-of-32': 'ROUND_OF_32',
+  'round-of-16': 'ROUND_OF_16',
+  'quarterfinals': 'QUARTER_FINALS',
+  'semifinals': 'SEMI_FINALS',
+  '3rd-place-match': 'THIRD_PLACE',
+  'final': 'FINAL',
+};
 
 export const STAGE_LABELS = {
   GROUP_STAGE: 'Fase de Grups',
-  ROUND_OF_16: 'Setzens de Final',
+  ROUND_OF_32: 'Setzens de Final',
+  ROUND_OF_16: 'Vuitens de Final',
   QUARTER_FINALS: 'Quarts de Final',
   SEMI_FINALS: 'Semifinals',
   THIRD_PLACE: '3r i 4t Lloc',
@@ -19,7 +43,7 @@ export const STATUS_LABELS = {
   CANCELLED: 'Cancel·lat',
 };
 
-const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
 
 export function formatMatchDateTime(utcDate) {
   if (!utcDate) return '';
@@ -178,45 +202,82 @@ export function matchesSectionHtml(matches) {
   return html || '<p class="muted">No hi ha partits per mostrar.</p>';
 }
 
-async function fdFetch(path, token) {
-  const res = await fetch(`${FD_API_BASE}${path}`, {
-    headers: { 'X-Auth-Token': token },
-  });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(`Error API (${res.status}): ${msg}`);
-  }
-  return res.json();
+function espnEventToMatch(event) {
+  const comp = event.competitions?.[0] ?? {};
+  const competitors = comp.competitors ?? [];
+  const home = competitors.find((c) => c.homeAway === 'home') ?? competitors[0] ?? {};
+  const away = competitors.find((c) => c.homeAway === 'away') ?? competitors[1] ?? {};
+  const statusName = comp.status?.type?.name ?? 'STATUS_SCHEDULED';
+  const status = ESPN_STATUS_MAP[statusName] ?? 'SCHEDULED';
+  const slug = event.season?.slug ?? '';
+  const stage = ESPN_SLUG_MAP[slug] ?? 'GROUP_STAGE';
+  const note = comp.altGameNote ?? '';
+  const groupMatch = note.match(/Group ([A-Z])/);
+  const group = groupMatch ? `Grup ${groupMatch[1]}` : null;
+  const homeScore = home.score !== undefined ? Number(home.score) : null;
+  const awayScore = away.score !== undefined ? Number(away.score) : null;
+  return {
+    id: event.id,
+    homeTeam: { name: home.team?.displayName ?? '?' },
+    awayTeam: { name: away.team?.displayName ?? '?' },
+    status,
+    score: { fullTime: { home: homeScore, away: awayScore } },
+    stage,
+    group,
+    matchday: group,
+    utcDate: event.date,
+  };
 }
 
-export async function fetchWCData(token) {
-  const [matchesResult, standingsResult] = await Promise.allSettled([
-    fdFetch('/competitions/WC/matches?season=2026', token),
-    fdFetch('/competitions/WC/standings?season=2026', token),
+function espnGroupToStanding(group) {
+  const entries = (group.standings?.entries ?? []).map((entry, i) => {
+    const stat = (name) => {
+      const s = entry.stats?.find((x) => x.name === name);
+      return s ? Number(s.value) : 0;
+    };
+    return {
+      position: stat('rank') || i + 1,
+      team: { name: entry.team?.displayName ?? '?' },
+      playedGames: stat('gamesPlayed'),
+      won: stat('wins'),
+      draw: stat('ties'),
+      lost: stat('losses'),
+      goalsFor: stat('pointsFor'),
+      goalsAgainst: stat('pointsAgainst'),
+      goalDifference: stat('pointDifferential'),
+      points: stat('points'),
+    };
+  });
+  return { type: 'TOTAL', group: group.name, table: entries };
+}
+
+export async function fetchWCData() {
+  const [eventsResult, standingsResult] = await Promise.allSettled([
+    fetch(`${ESPN_SCOREBOARD}?limit=200&dates=20260611-20260719`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`ESPN scoreboard ${r.status}`)))),
+    fetch(`${ESPN_STANDINGS}?season=2026&seasontype=1`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`ESPN standings ${r.status}`)))),
   ]);
 
-  return {
-    matches: matchesResult.status === 'fulfilled' ? (matchesResult.value.matches ?? []) : [],
-    standings: standingsResult.status === 'fulfilled' ? (standingsResult.value.standings ?? []) : [],
-    errors: [
-      matchesResult.status === 'rejected' ? matchesResult.reason : null,
-      standingsResult.status === 'rejected' ? standingsResult.reason : null,
-    ].filter(Boolean),
-  };
+  const matches = eventsResult.status === 'fulfilled'
+    ? (eventsResult.value.events ?? []).map(espnEventToMatch)
+    : [];
+  const standings = standingsResult.status === 'fulfilled'
+    ? (standingsResult.value.children ?? []).map(espnGroupToStanding)
+    : [];
+  const errors = [
+    eventsResult.status === 'rejected' ? eventsResult.reason : null,
+    standingsResult.status === 'rejected' ? standingsResult.reason : null,
+  ].filter(Boolean);
+
+  return { matches, standings, errors };
 }
 
 export function initMundial() {
   const section = document.getElementById('mundial-section');
   if (!section) return;
 
-  const token = window.__FOOTBALL_DATA_TOKEN;
   const statusEl = section.querySelector('#mundial-status');
-
-  if (!token) {
-    if (statusEl) statusEl.textContent = 'Cal configurar window.__FOOTBALL_DATA_TOKEN a index.html';
-    return;
-  }
-
   const tabPartits = section.querySelector('#tab-partits');
   const tabGrups = section.querySelector('#tab-grups');
 
@@ -232,7 +293,7 @@ export function initMundial() {
   async function loadData() {
     if (statusEl) statusEl.textContent = 'Carregant dades del Mundial 2026...';
     try {
-      const { matches, standings, errors } = await fetchWCData(token);
+      const { matches, standings, errors } = await fetchWCData();
       if (tabPartits) tabPartits.innerHTML = matchesSectionHtml(matches);
       if (tabGrups) tabGrups.innerHTML = standingsHtml(standings);
       const time = new Date().toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
@@ -247,7 +308,6 @@ export function initMundial() {
   }
 
   section.querySelector('#refresh-mundial')?.addEventListener('click', loadData);
-
   loadData();
   setInterval(loadData, 2 * 60 * 1000);
 }

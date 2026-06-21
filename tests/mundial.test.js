@@ -307,19 +307,55 @@ test('matchesSectionHtml inclou partits eliminatories', () => {
 // ---------------------------------------------------------------------------
 
 test('fetchWCData retorna matches i standings en èxit', async () => {
-  const mockMatches = [makeMatch()];
-  const mockStandings = [{ type: 'TOTAL', group: 'Grup A', table: [] }];
-
-  globalThis.fetch = async (url) => {
-    if (url.includes('/matches')) {
-      return { ok: true, json: async () => ({ matches: mockMatches }) };
-    }
-    return { ok: true, json: async () => ({ standings: mockStandings }) };
+  const mockMatches = [{
+    id: '1',
+    date: '2026-06-15T18:00:00Z',
+    name: 'Spain at Brazil',
+    season: { slug: 'group-stage' },
+    competitions: [{
+      altGameNote: 'FIFA World Cup, Group A',
+      status: { type: { name: 'STATUS_FULL_TIME' } },
+      competitors: [
+        { homeAway: 'home', score: '2', team: { displayName: 'Spain' } },
+        { homeAway: 'away', score: '1', team: { displayName: 'Brazil' } },
+      ],
+    }],
+  }];
+  const mockStandings = {
+    children: [{
+      name: 'Group A',
+      standings: {
+        entries: [{
+          team: { displayName: 'Spain' },
+          stats: [
+            { name: 'gamesPlayed', value: 1 },
+            { name: 'wins', value: 1 },
+            { name: 'ties', value: 0 },
+            { name: 'losses', value: 0 },
+            { name: 'pointsFor', value: 2 },
+            { name: 'pointsAgainst', value: 1 },
+            { name: 'pointDifferential', value: 1 },
+            { name: 'points', value: 3 },
+            { name: 'rank', value: 1 },
+          ],
+        }],
+      },
+    }],
   };
 
-  const result = await fetchWCData('test-token');
+  globalThis.fetch = async (url) => {
+    if (url.includes('scoreboard')) {
+      return { ok: true, json: async () => ({ events: mockMatches }) };
+    }
+    return { ok: true, json: async () => mockStandings };
+  };
+
+  const result = await fetchWCData();
   assert.equal(result.matches.length, 1);
+  assert.equal(result.matches[0].homeTeam.name, 'Spain');
+  assert.equal(result.matches[0].status, 'FINISHED');
   assert.equal(result.standings.length, 1);
+  assert.equal(result.standings[0].group, 'Group A');
   assert.equal(result.errors.length, 0);
 
   delete globalThis.fetch;
@@ -327,13 +363,13 @@ test('fetchWCData retorna matches i standings en èxit', async () => {
 
 test('fetchWCData retorna errors parcials si un endpoint falla', async () => {
   globalThis.fetch = async (url) => {
-    if (url.includes('/matches')) {
-      return { ok: true, json: async () => ({ matches: [] }) };
+    if (url.includes('scoreboard')) {
+      return { ok: true, json: async () => ({ events: [] }) };
     }
-    return { ok: false, status: 403, text: async () => 'Forbidden', statusText: 'Forbidden' };
+    return { ok: false, status: 403 };
   };
 
-  const result = await fetchWCData('bad-token');
+  const result = await fetchWCData();
   assert.equal(result.matches.length, 0);
   assert.equal(result.errors.length, 1);
 
@@ -341,14 +377,9 @@ test('fetchWCData retorna errors parcials si un endpoint falla', async () => {
 });
 
 test('fetchWCData retorna arrays buits si tots els endpoints fallen', async () => {
-  globalThis.fetch = async () => ({
-    ok: false,
-    status: 500,
-    text: async () => 'Internal Server Error',
-    statusText: 'Internal Server Error',
-  });
+  globalThis.fetch = async () => ({ ok: false, status: 500 });
 
-  const result = await fetchWCData('token');
+  const result = await fetchWCData();
   assert.equal(result.matches.length, 0);
   assert.equal(result.standings.length, 0);
   assert.equal(result.errors.length, 2);
