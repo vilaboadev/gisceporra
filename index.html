@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gisceporra Mundial</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Gisceporra Mundial</h1>
+      <p class="muted">Web rápida para porra interna (GitHub Pages + Supabase)</p>
+
+      <section class="card">
+        <h2>Registro / Login</h2>
+        <form id="auth-form" class="grid">
+          <input id="email" type="email" placeholder="Email" required />
+          <input id="password" type="password" placeholder="Contraseña" required />
+          <div class="row">
+            <button type="submit" data-action="login">Entrar</button>
+            <button type="submit" data-action="register">Registrarme</button>
+            <button type="button" id="logout">Salir</button>
+          </div>
+        </form>
+        <p id="session-label" class="muted">No autenticado</p>
+      </section>
+
+      <section class="card">
+        <h2>Resultados de partidos</h2>
+        <button id="reload-matches">Recargar partidos</button>
+        <ul id="matches"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Registrar apuesta</h2>
+        <form id="bet-form" class="grid">
+          <label>Partido
+            <select id="match-id" required></select>
+          </label>
+          <label>Resultado previsto
+            <div class="row">
+              <input id="home-goals" type="number" min="0" required />
+              <span>-</span>
+              <input id="away-goals" type="number" min="0" required />
+            </div>
+          </label>
+          <label>Campeón (Bola de Cristal)
+            <input id="champion" type="text" placeholder="Selección campeona" />
+          </label>
+          <button type="submit">Guardar apuesta</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Clasificación</h2>
+        <button id="recalculate">Recalcular</button>
+        <ol id="leaderboard"></ol>
+      </section>
+
+      <section class="card">
+        <h2>Reglas de puntuación</h2>
+        <ul>
+          <li>Fase de grupos: Top 3 (5 pts), posición exacta (+10 pts).</li>
+          <li>Setzens/Vuitens: ganador 10, resultado exacto 20.</li>
+          <li>Quarts: ganador 15, resultado exacto 30.</li>
+          <li>Semifinals: ganador 20, resultado exacto 40.</li>
+          <li>Final: ganador 30, resultado exacto 50.</li>
+          <li>Bola de Cristal: campeón acertado +100.</li>
+        </ul>
+      </section>
+
+      <p id="status" role="status"></p>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

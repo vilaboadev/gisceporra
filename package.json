@@ -1,0 +1,22 @@
+{
+  "name": "gisceporra",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test",
+    "start": "python -m http.server 4173"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vilaboadev/gisceporra.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vilaboadev/gisceporra/issues"
+  },
+  "homepage": "https://github.com/vilaboadev/gisceporra#readme",
+  "type": "module"
+}
