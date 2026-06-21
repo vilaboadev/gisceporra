@@ -181,6 +181,18 @@ test('matchCardHtml no mostra null per partits programats', () => {
   assert.ok(!html.includes('null'));
 });
 
+test('matchCardHtml mostra data i hora per partits programats', () => {
+  const html = matchCardHtml(makeMatch({ status: 'SCHEDULED', utcDate: '2026-07-01T20:00:00Z' }));
+  assert.ok(html.includes('match-datetime'));
+  assert.ok(!html.includes('null'));
+});
+
+test('matchCardHtml partits programats mostren els dos equips en la mateixa fila', () => {
+  const html = matchCardHtml(makeMatch({ status: 'SCHEDULED' }));
+  assert.ok(html.includes('match-vs'));
+  assert.ok(html.includes('Espanya') && html.includes('Brasil'));
+});
+
 // ---------------------------------------------------------------------------
 // standingsGroupHtml
 // ---------------------------------------------------------------------------

@@ -416,6 +416,12 @@ body {
   background: var(--live-dim);
 }
 .match-card.scheduled { opacity: .8; }
+.match-vs { color: var(--text3); font-size: .8rem; flex-shrink: 0; padding: 0 .35rem; }
+.match-team.right { text-align: right; }
+.match-datetime {
+  font-size: .75rem; color: var(--accent);
+  margin-top: .3rem; font-weight: 500;
+}
 
 .match-teams { flex: 1; }
 .match-team-row { display: flex; justify-content: space-between; align-items: center; font-size: .9rem; }

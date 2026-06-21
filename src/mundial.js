@@ -48,12 +48,12 @@ const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINAL
 export function formatMatchDateTime(utcDate) {
   if (!utcDate) return '';
   const d = new Date(utcDate);
-  return d.toLocaleString('ca', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const opts = { timeZone: 'Europe/Madrid' };
+  const weekday = d.toLocaleDateString('ca', { ...opts, weekday: 'short' });
+  const day     = d.toLocaleDateString('ca', { ...opts, day: '2-digit' });
+  const month   = d.toLocaleDateString('ca', { ...opts, month: 'short' });
+  const time    = d.toLocaleTimeString('ca', { ...opts, hour: '2-digit', minute: '2-digit' });
+  return `${weekday} ${day} ${month} · ${time}`;
 }
 
 export function getMatchDisplayScore(match) {
@@ -97,24 +97,39 @@ export function matchCardHtml(match) {
   const status = STATUS_LABELS[match.status] ?? match.status;
   const live = match.status === 'IN_PLAY' || match.status === 'PAUSED';
   const finished = match.status === 'FINISHED';
+  const scheduled = !live && !finished;
   const homeScore = match.score?.fullTime?.home;
   const awayScore = match.score?.fullTime?.away;
   const cardClass = live ? 'live' : finished ? 'finished' : 'scheduled';
-  const badgeClass = live ? 'live' : finished ? 'finished' : 'scheduled';
   const badgeLabel = live ? '🔴 EN JOC' : status;
-  const timeStr = !finished && !live ? formatMatchDateTime(match.utcDate) : '';
+
+  if (scheduled) {
+    const timeStr = formatMatchDateTime(match.utcDate);
+    return `<div class="match-card scheduled">
+      <div class="match-teams">
+        <div class="match-team-row">
+          <span class="match-team">${match.homeTeam?.name ?? '?'}</span>
+          <span class="match-vs">vs</span>
+          <span class="match-team right">${match.awayTeam?.name ?? '?'}</span>
+        </div>
+        <div class="match-datetime">${timeStr}</div>
+      </div>
+      <span class="match-status-badge scheduled">${badgeLabel}</span>
+    </div>`;
+  }
+
   return `<div class="match-card ${cardClass}">
     <div class="match-teams">
       <div class="match-team-row">
         <span class="match-team">${match.homeTeam?.name ?? '?'}</span>
-        <span class="match-score">${homeScore ?? (timeStr || '–')}</span>
+        <span class="match-score">${homeScore ?? '–'}</span>
       </div>
       <div class="match-team-row">
         <span class="match-team">${match.awayTeam?.name ?? '?'}</span>
-        <span class="match-score">${awayScore ?? ''}</span>
+        <span class="match-score">${awayScore ?? '–'}</span>
       </div>
     </div>
-    <span class="match-status-badge ${badgeClass}">${badgeLabel}</span>
+    <span class="match-status-badge ${cardClass}">${badgeLabel}</span>
   </div>`;
 }
 
