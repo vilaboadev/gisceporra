@@ -5,9 +5,9 @@ import {
   matchesSectionHtml,
   standingsHtml,
   knockoutBracketHtml,
-  matchCardHtml,
   formatMatchDateTime,
 } from './mundial.js';
+import { teamWithFlag, getFlag } from './flags.js';
 
 // ── Supabase ──────────────────────────────────────────────────────────────
 const cfg = window.__SUPABASE_CONFIG ?? { url: '', anonKey: '' };
@@ -153,9 +153,9 @@ async function loadHome() {
         <div class="live-badge"><span class="live-dot"></span> EN JOC ARA</div>
         ${live.map(m => `
           <div class="live-match-row">
-            <span class="lm-team">${m.homeTeam.name}</span>
+            <span class="lm-team">${teamWithFlag(m.homeTeam.name)}</span>
             <span class="lm-score">${m.score.fullTime.home ?? '·'} – ${m.score.fullTime.away ?? '·'}</span>
-            <span class="lm-team right">${m.awayTeam.name}</span>
+            <span class="lm-team right">${teamWithFlag(m.awayTeam.name)}</span>
           </div>`).join('')}
       </div>`;
   } else if (upcoming[0]) {
@@ -165,9 +165,9 @@ async function loadHome() {
       <div class="next-match-card">
         <p class="tag">Pròxim partit</p>
         <div class="nm-row">
-          <span>${n.homeTeam.name}</span>
+          <span>${teamWithFlag(n.homeTeam.name)}</span>
           <span class="vs">vs</span>
-          <span>${n.awayTeam.name}</span>
+          <span>${teamWithFlag(n.awayTeam.name)}</span>
         </div>
         <p class="nm-time">${d.toLocaleDateString('ca',{weekday:'short',day:'2-digit',month:'short'})} · ${d.toLocaleTimeString('ca',{hour:'2-digit',minute:'2-digit'})}</p>
       </div>`;
@@ -492,13 +492,13 @@ function betFormCard(match) {
         <span class="bet-date muted">${dateStr}</span>
       </div>
       <div class="bet-teams">
-        <span class="bet-team-name">${match.homeTeam.name}</span>
+        <span class="bet-team-name">${teamWithFlag(match.homeTeam.name)}</span>
         <div class="bet-score-inputs">
           <input class="bet-home bet-goal-input" type="number" min="0" max="20" placeholder="0" required />
           <span class="bet-dash">–</span>
           <input class="bet-away bet-goal-input" type="number" min="0" max="20" placeholder="0" required />
         </div>
-        <span class="bet-team-name right">${match.awayTeam.name}</span>
+        <span class="bet-team-name right">${teamWithFlag(match.awayTeam.name)}</span>
       </div>
       <p class="bet-hint muted">Resultat final (incloent pròrroga si n'hi ha)</p>
       <div class="tie-winner-group hidden">
