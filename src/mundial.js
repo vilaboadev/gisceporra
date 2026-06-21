@@ -97,19 +97,24 @@ export function matchCardHtml(match) {
   const status = STATUS_LABELS[match.status] ?? match.status;
   const live = match.status === 'IN_PLAY' || match.status === 'PAUSED';
   const finished = match.status === 'FINISHED';
-  const displayScore = getMatchDisplayScore(match);
-  const statusClass = live ? 'status-live' : finished ? 'status-finished' : 'status-scheduled';
-  const matchday = match.matchday ? `<span class="match-day">J${match.matchday}</span>` : '';
-  return `<div class="match-card ${statusClass}">
+  const homeScore = match.score?.fullTime?.home;
+  const awayScore = match.score?.fullTime?.away;
+  const cardClass = live ? 'live' : finished ? 'finished' : 'scheduled';
+  const badgeClass = live ? 'live' : finished ? 'finished' : 'scheduled';
+  const badgeLabel = live ? '🔴 EN JOC' : status;
+  const timeStr = !finished && !live ? formatMatchDateTime(match.utcDate) : '';
+  return `<div class="match-card ${cardClass}">
     <div class="match-teams">
-      <span class="team home">${match.homeTeam?.name ?? '?'}</span>
-      <span class="match-score">${displayScore}</span>
-      <span class="team away">${match.awayTeam?.name ?? '?'}</span>
+      <div class="match-team-row">
+        <span class="match-team">${match.homeTeam?.name ?? '?'}</span>
+        <span class="match-score">${homeScore ?? (timeStr || '–')}</span>
+      </div>
+      <div class="match-team-row">
+        <span class="match-team">${match.awayTeam?.name ?? '?'}</span>
+        <span class="match-score">${awayScore ?? ''}</span>
+      </div>
     </div>
-    <div class="match-meta">
-      <span class="match-status">${status}</span>
-      ${matchday}
-    </div>
+    <span class="match-status-badge ${badgeClass}">${badgeLabel}</span>
   </div>`;
 }
 
@@ -117,8 +122,8 @@ export function standingsGroupHtml(group) {
   const rows = (group.table ?? [])
     .map(
       (row, i) => `<tr class="${i < 2 ? 'qualified' : ''}">
-      <td class="pos">${row.position}</td>
-      <td class="team-col">${row.team?.name ?? '?'}</td>
+      <td>${row.position}</td>
+      <td>${row.team?.name ?? '?'}</td>
       <td>${row.playedGames}</td>
       <td>${row.won}</td>
       <td>${row.draw}</td>
@@ -126,16 +131,16 @@ export function standingsGroupHtml(group) {
       <td>${row.goalsFor}</td>
       <td>${row.goalsAgainst}</td>
       <td>${row.goalDifference}</td>
-      <td class="points">${row.points}</td>
+      <td class="standings-pts">${row.points}</td>
     </tr>`,
     )
     .join('');
 
-  return `<div class="group-table">
-    <h3 class="group-title">${group.group ?? 'Grup'}</h3>
-    <table>
+  return `<div class="standings-group">
+    <div class="standings-group-name">${group.group ?? 'Grup'}</div>
+    <table class="standings-table">
       <thead><tr>
-        <th>#</th><th class="team-col">Equip</th>
+        <th>#</th><th>Equip</th>
         <th title="Partits jugats">PJ</th>
         <th title="Victòries">V</th>
         <th title="Empats">E</th>
@@ -160,47 +165,91 @@ export function standingsHtml(standings) {
 export function matchesSectionHtml(matches) {
   if (!matches?.length) return '<p class="muted">No hi ha dades de partits disponibles.</p>';
 
-  const active = filterActiveMatches(matches);
-  const byStage = groupMatchesByStage(matches);
+  const live = matches.filter(m => m.status === 'IN_PLAY' || m.status === 'PAUSED');
+  const upcoming = matches
+    .filter(m => m.status === 'SCHEDULED' || m.status === 'TIMED')
+    .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  const past = matches
+    .filter(m => m.status === 'FINISHED')
+    .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate));
+
   let html = '';
 
-  if (active.length > 0) {
-    html += '<h3 class="stage-title">🔴 Avui / Properament</h3>';
-    html += active.map(matchCardHtml).join('');
+  if (live.length > 0) {
+    html += '<div class="stage-section"><p class="stage-title">🔴 En Joc</p>';
+    html += live.map(matchCardHtml).join('');
+    html += '</div>';
   }
 
-  for (const stage of [...STAGE_ORDER].reverse()) {
-    const stageMatches = byStage[stage];
-    if (!stageMatches?.length) continue;
+  if (upcoming.length > 0) {
+    html += '<div class="stage-section"><p class="stage-title">📅 Propers Partits</p>';
+    html += upcoming.slice(0, 10).map(matchCardHtml).join('');
+    if (upcoming.length > 10) {
+      html += `<p class="muted" style="text-align:center;padding:.5rem 0">+${upcoming.length - 10} partits més</p>`;
+    }
+    html += '</div>';
+  }
 
-    const hasResults = stageMatches.some((m) => m.status === 'FINISHED' || m.status === 'IN_PLAY');
-    const hasUpcoming = stageMatches.some((m) => m.status === 'SCHEDULED' || m.status === 'TIMED');
-    if (!hasResults && !hasUpcoming) continue;
-
-    html += `<h3 class="stage-title">${STAGE_LABELS[stage] ?? stage}</h3>`;
-
-    if (stage === 'GROUP_STAGE') {
-      const byMatchday = {};
-      for (const m of stageMatches) {
-        const key = m.matchday ?? '?';
-        if (!byMatchday[key]) byMatchday[key] = [];
-        byMatchday[key].push(m);
+  if (past.length > 0) {
+    const byStage = groupMatchesByStage(past);
+    for (const stage of [...STAGE_ORDER].reverse()) {
+      const stageMatches = byStage[stage];
+      if (!stageMatches?.length) continue;
+      html += `<div class="stage-section"><p class="stage-title">${STAGE_LABELS[stage] ?? stage} – Resultats</p>`;
+      if (stage === 'GROUP_STAGE') {
+        html += stageMatches.slice(0, 12).map(matchCardHtml).join('');
+        if (stageMatches.length > 12) html += `<p class="muted" style="text-align:center;padding:.5rem 0">+${stageMatches.length - 12} partits</p>`;
+      } else {
+        html += stageMatches.map(matchCardHtml).join('');
       }
-      const days = Object.keys(byMatchday).sort((a, b) => Number(b) - Number(a));
-      for (const day of days.slice(0, 3)) {
-        const dayMatches = byMatchday[day];
-        if (dayMatches.some((m) => m.status === 'FINISHED' || m.status === 'IN_PLAY' || m.status === 'SCHEDULED')) {
-          html += `<h4 class="matchday-title">Jornada ${day}</h4>`;
-          html += dayMatches.map(matchCardHtml).join('');
-        }
-      }
-    } else {
-      html += stageMatches.map(matchCardHtml).join('');
+      html += '</div>';
     }
   }
 
   return html || '<p class="muted">No hi ha partits per mostrar.</p>';
 }
+
+const KNOCKOUT_STAGES = ['ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+
+export function knockoutBracketHtml(matches) {
+  if (!matches?.length) return '<p class="muted">No hi ha dades disponibles.</p>';
+  const knockout = matches.filter(m => m.stage && m.stage !== 'GROUP_STAGE');
+  if (!knockout.length) return '<p class="muted">La fase eliminatòria encara no ha començat.</p>';
+
+  const byStage = groupMatchesByStage(knockout);
+  let html = '';
+
+  for (const stage of KNOCKOUT_STAGES) {
+    const stageMatches = byStage[stage];
+    if (!stageMatches?.length) continue;
+
+    html += `<div class="bracket-round">
+      <p class="bracket-round-name">${STAGE_LABELS[stage] ?? stage}</p>`;
+
+    for (const m of stageMatches) {
+      const finished = m.status === 'FINISHED';
+      const hGoals = m.score?.fullTime?.home;
+      const aGoals = m.score?.fullTime?.away;
+      const hWin = finished && hGoals != null && aGoals != null && hGoals > aGoals;
+      const aWin = finished && hGoals != null && aGoals != null && aGoals > hGoals;
+      const dateStr = !finished ? formatMatchDateTime(m.utcDate) : '';
+      html += `<div class="bracket-match">
+        <div class="bracket-team ${hWin ? 'winner' : ''}">
+          <span>${m.homeTeam?.name ?? '?'}</span>
+          <span class="bracket-team-score">${finished ? (hGoals ?? '–') : dateStr}</span>
+        </div>
+        <div class="bracket-team ${aWin ? 'winner' : ''}">
+          <span>${m.awayTeam?.name ?? '?'}</span>
+          <span class="bracket-team-score">${finished ? (aGoals ?? '–') : ''}</span>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  return html;
+}
+
 
 function espnEventToMatch(event) {
   const comp = event.competitions?.[0] ?? {};
