@@ -191,8 +191,8 @@ async function fdFetch(path, token) {
 
 export async function fetchWCData(token) {
   const [matchesResult, standingsResult] = await Promise.allSettled([
-    fdFetch('/competitions/WC/matches', token),
-    fdFetch('/competitions/WC/standings', token),
+    fdFetch('/competitions/WC/matches?season=2026', token),
+    fdFetch('/competitions/WC/standings?season=2026', token),
   ]);
 
   return {
@@ -237,7 +237,8 @@ export function initMundial() {
       if (tabGrups) tabGrups.innerHTML = standingsHtml(standings);
       const time = new Date().toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
       if (statusEl) {
-        statusEl.textContent = `Actualitzat a les ${time}${errors.length ? ' (algunes dades no disponibles)' : ''}`;
+        const errMsg = errors.length ? ` · ⚠️ ${errors.map((e) => e.message).join('; ')}` : '';
+        statusEl.textContent = `Actualitzat a les ${time}${errMsg}`;
       }
     } catch (err) {
       if (statusEl) statusEl.textContent = `Error: ${err.message}`;
