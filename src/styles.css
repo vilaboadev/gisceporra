@@ -426,7 +426,8 @@ body {
 .match-teams { flex: 1; }
 .match-team-row { display: flex; justify-content: space-between; align-items: center; font-size: .9rem; }
 .match-team { font-weight: 500; }
-.match-score { font-weight: 700; min-width: 2.5rem; text-align: right; }
+.match-score { font-weight: 700; min-width: 2.5rem; text-align: right; font-size: 1.05rem; }
+.match-score.winner-score { color: var(--green); font-size: 1.15rem; }
 
 .match-meta { font-size: .7rem; color: var(--text3); margin-top: .2rem; }
 .match-status-badge {
@@ -467,6 +468,10 @@ body {
 .standings-table tr:last-child td { border-bottom: none; }
 .standings-table tr.qualified td:first-child { color: var(--green); }
 .standings-pts { font-weight: 700; }
+.std-pos { font-size: .75rem; white-space: nowrap; }
+.std-w { color: var(--green); font-weight: 600; }
+.std-d { color: var(--gold); font-weight: 600; }
+.std-l { color: var(--live); font-weight: 600; }
 
 /* ─── Knockout Bracket ───────────────────────────── */
 .bracket-round { margin-bottom: 1.25rem; }

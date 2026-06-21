@@ -1,3 +1,5 @@
+import { teamWithFlag } from './flags.js';
+
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
 
@@ -108,9 +110,9 @@ export function matchCardHtml(match) {
     return `<div class="match-card scheduled">
       <div class="match-teams">
         <div class="match-team-row">
-          <span class="match-team">${match.homeTeam?.name ?? '?'}</span>
+          <span class="match-team">${teamWithFlag(match.homeTeam?.name)}</span>
           <span class="match-vs">vs</span>
-          <span class="match-team right">${match.awayTeam?.name ?? '?'}</span>
+          <span class="match-team right">${teamWithFlag(match.awayTeam?.name)}</span>
         </div>
         <div class="match-datetime">${timeStr}</div>
       </div>
@@ -121,12 +123,12 @@ export function matchCardHtml(match) {
   return `<div class="match-card ${cardClass}">
     <div class="match-teams">
       <div class="match-team-row">
-        <span class="match-team">${match.homeTeam?.name ?? '?'}</span>
-        <span class="match-score">${homeScore ?? '–'}</span>
+        <span class="match-team">${teamWithFlag(match.homeTeam?.name)}</span>
+        <span class="match-score ${homeScore > awayScore ? 'winner-score' : ''}">${homeScore ?? '–'}</span>
       </div>
       <div class="match-team-row">
-        <span class="match-team">${match.awayTeam?.name ?? '?'}</span>
-        <span class="match-score">${awayScore ?? '–'}</span>
+        <span class="match-team">${teamWithFlag(match.awayTeam?.name)}</span>
+        <span class="match-score ${awayScore > homeScore ? 'winner-score' : ''}">${awayScore ?? '–'}</span>
       </div>
     </div>
     <span class="match-status-badge ${cardClass}">${badgeLabel}</span>
@@ -137,15 +139,15 @@ export function standingsGroupHtml(group) {
   const rows = (group.table ?? [])
     .map(
       (row, i) => `<tr class="${i < 2 ? 'qualified' : ''}">
-      <td>${row.position}</td>
-      <td>${row.team?.name ?? '?'}</td>
+      <td class="std-pos">${i < 2 ? ['🟢','🟢'][i] : (i === 2 ? '🟡' : '🔴')} ${row.position}</td>
+      <td>${teamWithFlag(row.team?.name)}</td>
       <td>${row.playedGames}</td>
-      <td>${row.won}</td>
-      <td>${row.draw}</td>
-      <td>${row.lost}</td>
+      <td class="${row.won > 0 ? 'std-w' : ''}">${row.won}</td>
+      <td class="${row.draw > 0 ? 'std-d' : ''}">${row.draw}</td>
+      <td class="${row.lost > 0 ? 'std-l' : ''}">${row.lost}</td>
       <td>${row.goalsFor}</td>
       <td>${row.goalsAgainst}</td>
-      <td>${row.goalDifference}</td>
+      <td>${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}</td>
       <td class="standings-pts">${row.points}</td>
     </tr>`,
     )
@@ -250,11 +252,11 @@ export function knockoutBracketHtml(matches) {
       const dateStr = !finished ? formatMatchDateTime(m.utcDate) : '';
       html += `<div class="bracket-match">
         <div class="bracket-team ${hWin ? 'winner' : ''}">
-          <span>${m.homeTeam?.name ?? '?'}</span>
+          <span>${teamWithFlag(m.homeTeam?.name)}</span>
           <span class="bracket-team-score">${finished ? (hGoals ?? '–') : dateStr}</span>
         </div>
         <div class="bracket-team ${aWin ? 'winner' : ''}">
-          <span>${m.awayTeam?.name ?? '?'}</span>
+          <span>${teamWithFlag(m.awayTeam?.name)}</span>
           <span class="bracket-team-score">${finished ? (aGoals ?? '–') : ''}</span>
         </div>
       </div>`;
