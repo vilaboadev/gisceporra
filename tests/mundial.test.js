@@ -431,3 +431,61 @@ test('fetchWCData retorna arrays buits si tots els endpoints fallen', async () =
 
   delete globalThis.fetch;
 });
+
+// ---------------------------------------------------------------------------
+// flags.js — formatPlaceholder i teamWithFlag
+// ---------------------------------------------------------------------------
+import { formatPlaceholder, teamWithFlag, getFlag } from '../src/flags.js';
+
+test('formatPlaceholder converteix Group Winner a 1r', () => {
+  assert.equal(formatPlaceholder('Group A Winner'), '🏆 Grup A · 1r');
+  assert.equal(formatPlaceholder('Group L Winner'), '🏆 Grup L · 1r');
+});
+
+test('formatPlaceholder converteix 2nd Place a 2n', () => {
+  assert.equal(formatPlaceholder('Group B 2nd Place'), '🥈 Grup B · 2n');
+});
+
+test('formatPlaceholder converteix Round of 32', () => {
+  assert.equal(formatPlaceholder('Round of 32 5 Winner'), 'Setzens #5');
+});
+
+test('formatPlaceholder converteix Round of 16', () => {
+  assert.equal(formatPlaceholder('Round of 16 3 Winner'), 'Vuitens #3');
+});
+
+test('formatPlaceholder converteix Quarterfinal', () => {
+  assert.equal(formatPlaceholder('Quarterfinal 2 Winner'), 'Quarts #2');
+});
+
+test('formatPlaceholder converteix Semifinal Winner i Loser', () => {
+  assert.equal(formatPlaceholder('Semifinal 1 Winner'), 'Semi #1');
+  assert.equal(formatPlaceholder('Semifinal 2 Loser'), 'Semi #2 (3r lloc)');
+});
+
+test('formatPlaceholder converteix Third Place Group', () => {
+  const r = formatPlaceholder('Third Place Group A/B/C/D/F');
+  assert.ok(r.includes('3rs') && r.includes('A/B/C/D/F'));
+});
+
+test('formatPlaceholder retorna nom real sense canvis', () => {
+  assert.equal(formatPlaceholder('Spain'), 'Spain');
+  assert.equal(formatPlaceholder('Brazil'), 'Brazil');
+});
+
+test('teamWithFlag afegeix bandera per noms reals', () => {
+  const r = teamWithFlag('Spain');
+  assert.ok(r.includes('🇪🇸') && r.includes('Spain'));
+});
+
+test('teamWithFlag converteix placeholder sense bandera', () => {
+  const r = teamWithFlag('Group A Winner');
+  assert.ok(r.includes('Grup A') && r.includes('1r'));
+  assert.ok(!r.includes('🇪🇸'));
+});
+
+test('getFlag retorna string buit per noms desconeguts', () => {
+  assert.equal(getFlag('Unknown Team'), '');
+  assert.equal(getFlag(''), '');
+  assert.equal(getFlag(null), '');
+});
