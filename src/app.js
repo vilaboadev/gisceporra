@@ -15,7 +15,11 @@ const supabase = cfg.url && cfg.anonKey ? createClient(cfg.url, cfg.anonKey) : n
 
 // ── State ─────────────────────────────────────────────────────────────────
 let currentUser = null;
-let wc = null; // cached ESPN data
+let wc = null;          // cached ESPN data
+let wcFetchedAt = 0;    // timestamp of last fetch
+let homeRefreshTimer = null;
+const WC_TTL_NORMAL = 3 * 60 * 1000;   // 3 min cache when no live match
+const WC_TTL_LIVE   = 45 * 1000;        // 45 s cache when live match
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function hashPwd(p) {
@@ -59,15 +63,21 @@ function setStatus(id, msg, isErr = false) {
 
 // ── Navigation ────────────────────────────────────────────────────────────
 function navigate(section) {
-  ['noticies', 'porra', 'mundial'].forEach(s => {
+  ['principal', 'porra', 'mundial'].forEach(s => {
     document.getElementById(`screen-${s}`)?.classList.toggle('hidden', s !== section);
   });
   document.querySelectorAll('.nav-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.nav === section));
 
+  // Cancel home auto-refresh when leaving
+  if (section !== 'principal' && homeRefreshTimer) {
+    clearTimeout(homeRefreshTimer);
+    homeRefreshTimer = null;
+  }
+
   if (section === 'mundial') loadMundial();
   if (section === 'porra') loadPorra();
-  if (section === 'noticies') loadHome();
+  if (section === 'principal') loadHome();
 }
 
 window.navigate = navigate; // make accessible from inline onclick
@@ -86,7 +96,7 @@ function showApp(user) {
   show('app');
   $('user-avatar').textContent = user.username.slice(0, 2);
   $('user-label').textContent = user.display_name || user.username;
-  navigate('noticies');
+  navigate('principal');
 }
 
 $('login-form').addEventListener('submit', async e => {
@@ -111,10 +121,19 @@ $('logout-btn').addEventListener('click', () => {
   showLogin();
 });
 
-// ── Screen: Notícies ──────────────────────────────────────────────────────
+// ── Screen: Principal ─────────────────────────────────────────────────────
+async function fetchWCCached() {
+  const hasLive = wc?.matches?.some(m => m.status === 'IN_PLAY' || m.status === 'PAUSED');
+  const ttl = hasLive ? WC_TTL_LIVE : WC_TTL_NORMAL;
+  if (!wc || Date.now() - wcFetchedAt > ttl) {
+    wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
+    wcFetchedAt = Date.now();
+  }
+  return wc;
+}
+
 async function loadHome() {
-  if (!wc) wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
-  const { matches } = wc;
+  const { matches } = await fetchWCCached();
 
   const live = matches.filter(m => m.status === 'IN_PLAY' || m.status === 'PAUSED');
   const upcoming = matches
@@ -124,7 +143,10 @@ async function loadHome() {
     .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
     .slice(0, 5);
 
-  // Live alert
+  // ── User mini-ranking widget ──────────────────────────────────────────
+  loadUserWidget();
+
+  // ── Live / Next match ─────────────────────────────────────────────────
   if (live.length > 0) {
     $('home-live').innerHTML = `
       <div class="live-alert">
@@ -152,6 +174,16 @@ async function loadHome() {
   } else {
     $('home-live').innerHTML = '';
   }
+
+  // Auto-refresh: 45s si hi ha partit en viu, 3min si no
+  if (homeRefreshTimer) clearTimeout(homeRefreshTimer);
+  const refreshIn = live.length > 0 ? WC_TTL_LIVE : WC_TTL_NORMAL;
+  homeRefreshTimer = setTimeout(() => {
+    if (!document.getElementById('screen-principal')?.classList.contains('hidden')) {
+      wc = null; // força re-fetch
+      loadHome();
+    }
+  }, refreshIn);
 
   // Pending bets alert
   if (currentUser && supabase) {
@@ -183,8 +215,71 @@ async function loadHome() {
       <div class="result-row">
         <span class="rt">${m.homeTeam.name}</span>
         <span class="rs">${m.score.fullTime.home} – ${m.score.fullTime.away}</span>
-        <span class="rt">${m.awayTeam.name}</span>
+        <span class="rt right">${m.awayTeam.name}</span>
       </div>`).join('')}` : '';
+}
+
+// ── User widget (posició i punts a la pàgina principal) ───────────────────
+async function loadUserWidget() {
+  const el = $('home-user-widget');
+  if (!el || !currentUser) return;
+
+  if (!supabase) {
+    el.innerHTML = `<div class="user-widget"><span class="uw-name">${currentUser.display_name || currentUser.username}</span><span class="uw-pts">0 pts · <span class="uw-pos">#–</span></span></div>`;
+    return;
+  }
+
+  try {
+    const [partRes, grpResRes, champPredRes, participRes] = await Promise.all([
+      supabase.from('group_predictions').select('*'),
+      supabase.from('group_results').select('*'),
+      supabase.from('champion_predictions').select('*'),
+      supabase.from('participants').select('username, display_name'),
+    ]);
+
+    const allPreds = partRes.data ?? [];
+    const grpResults = grpResRes.data ?? [];
+    const champPreds = champPredRes.data ?? [];
+    const participants = participRes.data ?? [];
+    const finishedKO = (wc?.matches ?? []).filter(m => m.status === 'FINISHED' && m.stage !== 'GROUP_STAGE');
+    const campioRow = grpResults.find(r => r.group_name === 'campio');
+    const actualChampion = campioRow?.actual_1st ?? null;
+
+    const ranking = participants.map(p => {
+      let pts = 0;
+      for (const pred of allPreds.filter(pr => pr.username === p.username)) {
+        const res = grpResults.find(r => r.group_name === pred.group_name);
+        if (res) pts += calculateGroupPoints(
+          [pred.pred_1st, pred.pred_2nd, pred.pred_3rd].filter(Boolean),
+          [res.actual_1st, res.actual_2nd, res.actual_3rd].filter(Boolean)
+        );
+      }
+      const myChamp = champPreds.find(c => c.username === p.username);
+      if (myChamp?.champion && actualChampion) pts += calculateCrystalBallPoints(myChamp.champion, actualChampion);
+      return { username: p.username, displayName: p.display_name, points: pts };
+    }).sort((a, b) => b.points - a.points);
+
+    const myPos = ranking.findIndex(r => r.username === currentUser.username) + 1;
+    const myPts = ranking.find(r => r.username === currentUser.username)?.points ?? 0;
+    const total = ranking.length;
+
+    el.innerHTML = `
+      <div class="user-widget" onclick="navigate('porra')" role="button">
+        <div class="uw-left">
+          <div class="uw-avatar">${currentUser.username.slice(0,2)}</div>
+          <div>
+            <div class="uw-name">${currentUser.display_name || currentUser.username}</div>
+            <div class="uw-sub">Toca per veure ranking complet</div>
+          </div>
+        </div>
+        <div class="uw-right">
+          <div class="uw-pts">${myPts} <span class="pts-label">pts</span></div>
+          <div class="uw-pos">${myPos > 0 ? `#${myPos} / ${total}` : '–'}</div>
+        </div>
+      </div>`;
+  } catch {
+    el.innerHTML = '';
+  }
 }
 
 // ── Screen: Porra (Ranking + Apostes) ────────────────────────────────────
@@ -478,13 +573,12 @@ async function loadMundial() {
   const statusEl = $('mundial-status');
   if (statusEl) statusEl.textContent = 'Carregant…';
 
-  if (!wc) {
-    try {
-      wc = await fetchWCData();
-    } catch (err) {
-      if (statusEl) statusEl.textContent = `Error: ${err.message}`;
-      return;
-    }
+  try {
+    wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
+    wcFetchedAt = Date.now();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+    return;
   }
 
   renderMundialActiveTab();
