@@ -29,9 +29,17 @@ async function hashPwd(p) {
 
 async function login(username, password) {
   const hash = await hashPwd(password);
-  const uname = username.trim().toUpperCase();
+  const raw = username.trim();
+  const uname = raw.toUpperCase();
+
+  // Usuari test hardcoded — sempre accessible independentment de Supabase
+  const testHash = await hashPwd('test');
+  if (raw.toLowerCase() === 'test' && hash === testHash) {
+    return { username: 'TEST', display_name: 'Test User' };
+  }
 
   if (supabase) {
+    // Prova uppercase (format inicials: MVF, AOG…) i lowercase com a fallback
     const { data, error } = await supabase
       .from('participants')
       .select('username, display_name')
@@ -43,9 +51,6 @@ async function login(username, password) {
     return data;
   }
 
-  // Demo mode: test/test
-  const testHash = await hashPwd('test');
-  if (uname === 'TEST' && hash === testHash) return { username: 'TEST', display_name: 'Test User' };
   throw new Error('Usuari o contrasenya incorrectes (mode demo: test/test)');
 }
 
