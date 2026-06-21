@@ -24,13 +24,28 @@ const localStore = {
   bets: [],
 };
 
+async function hashLocalPassword(password) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('El modo local requiere Web Crypto para proteger contraseñas.');
+  }
+  const data = new TextEncoder().encode(password);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.style.color = isError ? '#fca5a5' : '#86efac';
 }
 
-function currentUserEmail() {
-  return supabase ? null : localStore.session?.email ?? null;
+async function currentUserEmail() {
+  if (supabase) {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.email ?? null;
+  }
+  return localStore.session?.email ?? null;
 }
 
 async function auth(action, email, password) {
@@ -47,12 +62,13 @@ async function auth(action, email, password) {
 
   if (action === 'register') {
     if (localStore.users.some((u) => u.email === email)) throw new Error('Usuario ya existe');
-    localStore.users.push({ email, password });
+    localStore.users.push({ email, passwordHash: await hashLocalPassword(password) });
     localStore.session = { email };
     return;
   }
 
-  const found = localStore.users.find((u) => u.email === email && u.password === password);
+  const passwordHash = await hashLocalPassword(password);
+  const found = localStore.users.find((u) => u.email === email && u.passwordHash === passwordHash);
   if (!found) throw new Error('Credenciales inválidas');
   localStore.session = { email };
 }
@@ -91,7 +107,7 @@ function populateMatches(matches) {
 }
 
 async function saveBet({ matchId, homeGoals, awayGoals, champion }) {
-  const userEmail = supabase ? (await supabase.auth.getUser()).data.user?.email : currentUserEmail();
+  const userEmail = await currentUserEmail();
   if (!userEmail) throw new Error('Debes iniciar sesión');
 
   if (supabase) {
@@ -106,7 +122,8 @@ async function saveBet({ matchId, homeGoals, awayGoals, champion }) {
     return;
   }
 
-  localStore.bets = localStore.bets.filter((bet) => !(bet.usuario_email === userEmail && bet.partido_id === matchId));
+  const isNotCurrentBet = (bet) => !(bet.usuario_email === userEmail && bet.partido_id === matchId);
+  localStore.bets = localStore.bets.filter(isNotCurrentBet);
   localStore.bets.push({
     usuario_email: userEmail,
     partido_id: matchId,
@@ -151,7 +168,14 @@ async function recalculateLeaderboard() {
         );
       }, 0);
 
-      const championPrediction = userBets.find((bet) => bet.champion_prediction)?.champion_prediction;
+      let championPrediction = null;
+      for (const bet of userBets) {
+        const prediction = bet.champion_prediction?.trim();
+        if (prediction) {
+          championPrediction = prediction;
+          break;
+        }
+      }
       const finalPoints = points + calculateCrystalBallPoints(championPrediction, matches.find((m) => m.round === 'final')?.winner);
       return { email: user.email, points: finalPoints };
     })

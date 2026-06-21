@@ -1,7 +1,11 @@
 const KNOCKOUT_POINTS = {
+  dieciseisavos: { winner: 10, exact: 20 },
+  octavos: { winner: 10, exact: 20 },
   setzens: { winner: 10, exact: 20 },
   vuitens: { winner: 10, exact: 20 },
+  quarter_finals: { winner: 15, exact: 30 },
   quarts: { winner: 15, exact: 30 },
+  semi_finals: { winner: 20, exact: 40 },
   semifinals: { winner: 20, exact: 40 },
   final: { winner: 30, exact: 50 },
 };

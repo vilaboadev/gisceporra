@@ -13,13 +13,14 @@ Web rápida para una porra del Mundial, preparada para publicar en GitHub Pages 
 ## Reglas de puntos
 
 - **Fase de grupos**
-  - Encertar un equipo del Top 3: **5 pts**
-  - Encertar posición exacta (1/2/3): **+10 pts**
+  - Acertar un equipo del Top 3: **5 pts**
+  - Acertar posición exacta (1/2/3): **+10 pts**
 - **Eliminatorias**
   - Setzens y Vuitens: ganador **10** | resultado exacto **20**
   - Quarts: ganador **15** | resultado exacto **30**
   - Semifinals: ganador **20** | resultado exacto **40**
   - Final: ganador **30** | resultado exacto **50**
+- Nota: se mantienen algunos términos en catalán para respetar las reglas originales del grupo.
 - **Bola de cristal**
   - Campeón acertado: **+100 pts**
 
