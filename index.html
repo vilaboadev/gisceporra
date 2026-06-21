@@ -1,71 +1,93 @@
 <!doctype html>
-<html lang="es">
+<html lang="ca">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gisceporra Mundial</title>
+    <title>Gisceporra Mundial 2026</title>
     <link rel="stylesheet" href="./src/styles.css" />
+    <!--
+      CONFIGURACIÓ:
+      1. Descomenta i omple window.__FOOTBALL_DATA_TOKEN
+         Clau gratuïta a: https://www.football-data.org/client/register
+      2. (Opcional) Descomenta window.__SUPABASE_CONFIG per a backend compartit
+    -->
+    <script>
+      // window.__FOOTBALL_DATA_TOKEN = 'EL_TEU_TOKEN_AQUI';
+      // window.__SUPABASE_CONFIG = { url: 'https://xxx.supabase.co', anonKey: 'eyJ...' };
+    </script>
   </head>
   <body>
     <main class="container">
-      <h1>Gisceporra Mundial</h1>
-      <p class="muted">Web rápida para porra interna (GitHub Pages + Supabase)</p>
+      <h1>🏆 Gisceporra Mundial 2026</h1>
+      <p class="muted">Porra interna del Mundial · GitHub Pages + Supabase</p>
 
-      <section class="card">
-        <h2>Registro / Login</h2>
-        <form id="auth-form" class="grid">
-          <input id="email" type="email" placeholder="Email" required />
-          <input id="password" type="password" placeholder="Contraseña" required />
-          <div class="row">
-            <button type="submit" data-action="login">Entrar</button>
-            <button type="submit" data-action="register">Registrarme</button>
-            <button type="button" id="logout">Salir</button>
-          </div>
-        </form>
-        <p id="session-label" class="muted">No autenticado</p>
+      <section class="card" id="mundial-section">
+        <h2>🌍 Seguiment del Mundial 2026</h2>
+        <div class="mundial-tabs">
+          <button class="tab-btn active" data-tab="partits">Partits</button>
+          <button class="tab-btn" data-tab="grups">Classificació de grups</button>
+        </div>
+        <p id="mundial-status" class="muted"></p>
+        <div id="tab-partits" class="tab-content"></div>
+        <div id="tab-grups" class="tab-content hidden"></div>
+        <button id="refresh-mundial" class="btn-secondary">🔄 Actualitzar</button>
       </section>
 
       <section class="card">
-        <h2>Resultados de partidos</h2>
-        <button id="reload-matches">Recargar partidos</button>
+        <h2>Registre / Login</h2>
+        <form id="auth-form" class="grid">
+          <input id="email" type="email" placeholder="Email" required />
+          <input id="password" type="password" placeholder="Contrasenya" required />
+          <div class="row">
+            <button type="submit" data-action="login">Entrar</button>
+            <button type="submit" data-action="register">Registrar-me</button>
+            <button type="button" id="logout">Sortir</button>
+          </div>
+        </form>
+        <p id="session-label" class="muted">No autenticat</p>
+      </section>
+
+      <section class="card">
+        <h2>Partits de la porra</h2>
+        <button id="reload-matches">Recarregar partits</button>
         <ul id="matches"></ul>
       </section>
 
       <section class="card">
-        <h2>Registrar apuesta</h2>
+        <h2>Registrar aposta</h2>
         <form id="bet-form" class="grid">
-          <label>Partido
+          <label>Partit
             <select id="match-id" required></select>
           </label>
-          <label>Resultado previsto
+          <label>Resultat previst
             <div class="row">
               <input id="home-goals" type="number" min="0" required />
               <span>-</span>
               <input id="away-goals" type="number" min="0" required />
             </div>
           </label>
-          <label>Campeón (Bola de Cristal)
-            <input id="champion" type="text" placeholder="Selección campeona" />
+          <label>Campió (Bola de Cristal)
+            <input id="champion" type="text" placeholder="Selecció campiona" />
           </label>
-          <button type="submit">Guardar apuesta</button>
+          <button type="submit">Guardar aposta</button>
         </form>
       </section>
 
       <section class="card">
-        <h2>Clasificación</h2>
+        <h2>Classificació</h2>
         <button id="recalculate">Recalcular</button>
         <ol id="leaderboard"></ol>
       </section>
 
       <section class="card">
-        <h2>Reglas de puntuación</h2>
+        <h2>Regles de puntuació</h2>
         <ul>
-          <li>Fase de grupos: Top 3 (5 pts), posición exacta (+10 pts).</li>
-          <li>Setzens/Vuitens (dieciseisavos/octavos): ganador 10, resultado exacto 20.</li>
-          <li>Quarts (cuartos): ganador 15, resultado exacto 30.</li>
-          <li>Semifinals: ganador 20, resultado exacto 40.</li>
-          <li>Final: ganador 30, resultado exacto 50.</li>
-          <li>Bola de Cristal: campeón acertado +100.</li>
+          <li>Fase de grups: Top 3 (5 pts), posició exacta (+10 pts).</li>
+          <li>Setzens/Vuitens: guanyador 10 pts, resultat exacte 20 pts.</li>
+          <li>Quarts: guanyador 15 pts, resultat exacte 30 pts.</li>
+          <li>Semifinals: guanyador 20 pts, resultat exacte 40 pts.</li>
+          <li>Final: guanyador 30 pts, resultat exacte 50 pts.</li>
+          <li>Bola de Cristal: campió encertat +100 pts.</li>
         </ul>
       </section>
 
@@ -73,5 +95,9 @@
     </main>
 
     <script type="module" src="./src/main.js"></script>
+    <script type="module">
+      import { initMundial } from './src/mundial.js';
+      initMundial();
+    </script>
   </body>
 </html>
