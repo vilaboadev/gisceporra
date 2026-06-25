@@ -333,9 +333,34 @@ async function loadUserWidget() {
   }
 }
 
-// ── Screen: Porra (Ranking + Apostes) ────────────────────────────────────
+// ── Screen: Porra (Ranking + Pronòstics + Jugadors) ──────────────────────
 async function loadPorra() {
-  await Promise.all([loadRanking(), loadBetForm()]);
+  setupPorraTabs();
+  const activeTab = document.querySelector('#screen-porra .tab-btn.active')?.dataset.tab ?? 'classificacio';
+  loadPorraTab(activeTab);
+}
+
+function setupPorraTabs() {
+  // One-time setup
+  if (document.getElementById('screen-porra').dataset.tabsReady) return;
+  document.getElementById('screen-porra').dataset.tabsReady = '1';
+
+  document.querySelectorAll('#screen-porra .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#screen-porra .tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#screen-porra .tab-content').forEach(c => c.classList.add('hidden'));
+      btn.classList.add('active');
+      const tabId = `tab-${btn.dataset.tab}`;
+      $(tabId)?.classList.remove('hidden');
+      loadPorraTab(btn.dataset.tab);
+    });
+  });
+}
+
+function loadPorraTab(tab) {
+  if (tab === 'classificacio') loadRanking();
+  else if (tab === 'pronostics') loadBetForm();
+  else if (tab === 'jugadors') loadPlayersTab();
 }
 
 async function loadRanking() {

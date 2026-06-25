@@ -67,11 +67,22 @@
 
       <!-- ── SCREEN: Porra & Ranking ── -->
       <section id="screen-porra" class="screen hidden">
-        <div id="porra-ranking"></div>
-        <div id="pronos-detail" class="hidden"></div>
-
-        <h3 class="section-h">Pronòstics Eliminatòria</h3>
-        <div id="bet-container"><p class="muted">Carregant…</p></div>
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="classificacio">🏆 Classificació</button>
+          <button class="tab-btn" data-tab="pronostics">📝 Pronòstics</button>
+          <button class="tab-btn" data-tab="jugadors">👥 Jugadors</button>
+        </div>
+        <div id="tab-classificacio" class="tab-content">
+          <div id="porra-ranking"></div>
+        </div>
+        <div id="tab-pronostics" class="tab-content hidden">
+          <div id="bet-container"><p class="muted">Carregant…</p></div>
+        </div>
+        <div id="tab-jugadors" class="tab-content hidden">
+          <p class="muted">Selecciona un jugador per veure els seus pronòstics.</p>
+          <div id="players-list"></div>
+          <div id="pronos-detail" class="hidden"></div>
+        </div>
       </section>
 
       <!-- ── SCREEN: Mundial ── -->
