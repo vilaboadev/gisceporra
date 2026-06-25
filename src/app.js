@@ -329,17 +329,28 @@ async function loadRanking() {
       if (!wc) wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
       const finishedMatches = wc.matches.filter(m => m.status === 'FINISHED' && m.stage !== 'GROUP_STAGE');
 
+      // Build map of actual top3 per group from ESPN standings
+      const actualTop3ByGroup = {};
+      for (const s of (wc.standings ?? [])) {
+        if (s.type !== 'TOTAL') continue;
+        const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
+        actualTop3ByGroup[groupKey] = (s.table ?? [])
+          .filter(t => t.position >= 1 && t.position <= 3)
+          .map(t => t.team?.name)
+          .filter(Boolean);
+      }
+
       ranking = participantsList.map(p => {
         let pts = 0;
 
-        // Group stage points
+        // Group stage points (from ESPN standings)
         const myPreds = allPreds.filter(pr => pr.username === p.username);
         for (const pred of myPreds) {
-          const res = grpResults.find(r => r.group_name === pred.group_name);
-          if (!res) continue;
+          const actualTop3 = actualTop3ByGroup[pred.group_name];
+          if (!actualTop3 || !actualTop3.length) continue;
           pts += calculateGroupPoints(
             [pred.pred_1st, pred.pred_2nd, pred.pred_3rd].filter(Boolean),
-            [res.actual_1st, res.actual_2nd, res.actual_3rd].filter(Boolean)
+            actualTop3
           );
         }
 
@@ -651,24 +662,45 @@ function renderMundialTab(tab) {
 async function loadGroupStandingsWithPredictions(standings) {
   const el = $('tab-grups');
   try {
-    const [grpResRes, partRes] = await Promise.all([
-      supabase.from('group_results').select('*'),
-      supabase.from('group_predictions').select('*').eq('username', currentUser.username),
-    ]);
-
-    const groupResults = grpResRes.data ?? [];
+    const partRes = await supabase.from('group_predictions').select('*').eq('username', currentUser.username);
     const predictions = partRes.data ?? [];
 
-    // Build predictions lookup: { groupName: { teamName: { predicted, points } } }
+    // Build predictions lookup per grup i equip
+    // Predictions ve de Supabase amb group_name='A'..'L', pred_1st, pred_2nd, pred_3rd
     const predLookup = {};
-    for (const res of groupResults) {
-      const actualOrder = [res.actual_1st, res.actual_2nd, res.actual_3rd, res.actual_4th].filter(Boolean);
-      if (!actualOrder.length) continue;
-      const pred = predictions.find(p => p.group_name === res.group_name);
-      const details = calculateGroupPointsDetailed(actualOrder, pred ?? {});
-      predLookup[res.group_name] = {};
-      for (const d of details) {
-        predLookup[res.group_name][d.team] = { predicted: d.predicted, points: d.points };
+    for (const pred of predictions) {
+      const g = pred.group_name; // 'A', 'B', etc.
+      predLookup[g] = {};
+      const pMap = { 1: pred.pred_1st, 2: pred.pred_2nd, 3: pred.pred_3rd };
+      for (const [pos, team] of Object.entries(pMap)) {
+        if (team) {
+          predLookup[g][team] = { predicted: Number(pos), points: 0 };
+        }
+      }
+    }
+
+    // Calcular punts per equip dins cada grup a partir dels standings reals
+    for (const group of standings) {
+      if (group.type !== 'TOTAL') continue;
+      const groupKey = (group.group ?? '').replace(/^(Group |Grup )/i, '');
+      const groupPreds = predLookup[groupKey];
+      if (!groupPreds) continue;
+
+      const table = group.table ?? [];
+      const actualTop3 = table
+        .filter(t => t.position >= 1 && t.position <= 3)
+        .map(t => t.team?.name);
+
+      for (const row of table) {
+        const team = row.team?.name;
+        if (!team || !groupPreds[team]) continue;
+        const predPos = groupPreds[team].predicted;
+        const inTop3 = actualTop3.includes(team);
+        const exact = predPos === row.position;
+        let pts = 0;
+        if (inTop3) pts += 5;
+        if (exact) pts += 5;
+        groupPreds[team].points = pts;
       }
     }
 

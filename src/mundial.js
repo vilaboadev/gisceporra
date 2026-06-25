@@ -146,11 +146,12 @@ export function matchCardHtml(match) {
 }
 
 export function standingsGroupHtml(group, predictions = {}) {
-  const rows = (group.table ?? [])
+  const sortedTable = [...(group.table ?? [])].sort((a, b) => (a.position || 99) - (b.position || 99));
+  const rows = sortedTable
     .map(
       (row, i) => {
         const teamName = row.team?.name ?? '';
-        const pred = predictions[teamName]; // { predicted, points } or undefined
+        const pred = predictions[teamName];
 
         const p = pred?.points ?? 0;
         const predPos = pred?.predicted ?? '–';
@@ -159,8 +160,8 @@ export function standingsGroupHtml(group, predictions = {}) {
         else if (p >= 5) dotClass = 'dot-yellow';
 
         return `<tr class="${i < 2 ? 'qualified' : ''}">
-      <td>${teamWithFlag(teamName)}</td>
       <td class="std-pos">${row.position}</td>
+      <td>${teamWithFlag(teamName)}</td>
       <td class="std-pred-cell"><span class="pred-dot ${dotClass}"></span>${predPos}</td>
       <td>${row.playedGames}</td>
       <td class="${row.won > 0 ? 'std-w' : ''}">${row.won}</td>
@@ -180,8 +181,8 @@ export function standingsGroupHtml(group, predictions = {}) {
     <div class="standings-table-wrap">
     <table class="standings-table">
       <thead><tr>
+        <th title="Posició real">#</th>
         <th>Equip</th>
-        <th title="Posició real">Pos</th>
         <th title="Pronòstic">Pron.</th>
         <th title="Partits jugats">PJ</th>
         <th title="Victòries">V</th>
