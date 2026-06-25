@@ -56,7 +56,7 @@ node --test tests/scoring.test.js  # test específic
 - **Mai** usar "aposta/apostes" → sempre "pronòstic/pronòstics"
 - Noms d'equip a la BD en **anglès** (ESPN)
 - `classificar` ≠ `classificar-se` → usar "tancat" per grups finalitzats
-- Usuari test: `username = 'test'`, no ha d'aparèixer al ranking
+- Usuari test: `username = 'TST'`, no ha d'aparèixer al ranking
 
 ## 📐 Puntuació
 
