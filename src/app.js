@@ -503,17 +503,117 @@ function rankingHtml(ranking, me) {
   html += '<ol class="ranking-list">';
   ranking.forEach((e, i) => {
     const isMe = e.username === me;
-    html += `<li class="ranking-item ${isMe ? 'is-me' : ''}">
+    html += `<li class="ranking-item ${isMe ? 'is-me' : ''}" data-username="${e.username}" onclick="showPlayerPronos('${e.username}')">
       <span class="rank-num">${i + 1}</span>
       <span class="rank-name">${e.displayName || e.username}</span>
       <span class="rank-pts">${e.points} <span class="pts-label">pts</span></span>
-      ${isMe ? '<span class="rank-you">Tu</span>' : ''}
+      ${isMe ? '<span class="rank-you">Tu</span>' : '<span class="rank-arrow muted">→</span>'}
     </li>`;
   });
   html += '</ol>';
 
   return html;
 }
+
+// ── Player pronos detail ─────────────────────────────────────────────────
+window.showPlayerPronos = async function(username) {
+  const el = $('pronos-detail');
+  if (!el || !supabase || !wc) return;
+
+  el.classList.toggle('hidden');
+  if (el.classList.contains('hidden')) return;
+
+  el.innerHTML = '<p class="muted">Carregant pronòstics…</p>';
+
+  try {
+    const [partRes, pronosRes] = await Promise.all([
+      supabase.from('group_predictions').select('*').eq('username', username),
+      supabase.from('pronostics').select('*').eq('username', username),
+    ]);
+
+    const predictions = partRes.data ?? [];
+    const bets = pronosRes.data ?? [];
+
+    // Closed groups from ESPN
+    const closedGroups = new Set();
+    for (const s of (wc.standings ?? [])) {
+      if (s.type !== 'TOTAL') continue;
+      const table = s.table ?? [];
+      if (table.every(t => t.playedGames === 3)) {
+        closedGroups.add((s.group ?? '').replace(/^(Group |Grup )/i, ''));
+      }
+    }
+
+    // Finished knockout matches
+    const finishedKO = (wc.matches ?? []).filter(m =>
+      m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE'
+    );
+
+    let html = `<h3 class="section-h">Pronòstics de ${username}</h3>`;
+
+    // Group bets (closed only)
+    if (predictions.length && closedGroups.size) {
+      html += '<h4 class="section-h">Fase de Grups</h4>';
+      for (const pred of predictions) {
+        if (!closedGroups.has(pred.group_name)) continue;
+        const s = wc.standings.find(st => {
+          const k = (st.group ?? '').replace(/^(Group |Grup )/i, '');
+          return st.type === 'TOTAL' && k === pred.group_name;
+        });
+        if (!s) continue;
+        const actualOrder = (s.table ?? [])
+          .sort((a, b) => (a.position || 99) - (b.position || 99))
+          .map(t => t.team?.name)
+          .filter(Boolean);
+        const details = calculateGroupPointsDetailed(actualOrder, pred);
+        const total = details.reduce((sum, d) => sum + d.points, 0);
+        html += `<div class="group-pred-card card">
+          <div class="gpc-header">
+            <span class="gpc-title">Grup ${pred.group_name}</span>
+            <span class="gpc-total">${total} pts</span>
+          </div>
+          <table class="group-pred-table">
+            <thead><tr><th>#</th><th>Equip</th><th>Pron.</th><th>Pts</th></tr></thead>
+            <tbody>
+            ${details.map(d => `
+              <tr class="${d.predicted === d.position ? 'exact-row' : ''}">
+                <td class="gpc-pos">${d.position}</td>
+                <td>${teamWithFlag(d.team)}</td>
+                <td class="gpc-pred">${d.predicted ?? '–'}</td>
+                <td class="gpc-pts">${d.points || '–'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+      }
+    }
+
+    // Knockout bets (finished only)
+    if (bets.length && finishedKO.length) {
+      html += '<h4 class="section-h">Eliminatòria</h4>';
+      for (const bet of bets) {
+        const match = finishedKO.find(m => String(m.id) === bet.match_key);
+        if (!match) continue;
+        const actualHome = match.score?.fullTime?.home ?? '-';
+        const actualAway = match.score?.fullTime?.away ?? '-';
+        html += `<div class="bet-detail-row card">
+          <div class="bet-detail-teams">
+            ${teamWithFlag(bet.home_team)} <span class="bold">${bet.pred_home_goals} – ${bet.pred_away_goals}</span> ${teamWithFlag(bet.away_team)}
+          </div>
+          <div class="muted">Real: ${actualHome} – ${actualAway}</div>
+        </div>`;
+      }
+    }
+
+    if (!html.includes('Grup') && !html.includes('Eliminat')) {
+      html += '<p class="muted">No hi ha pronòstics tancats per mostrar.</p>';
+    }
+
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+  }
+};
 
 // ── Bet Form (Fase Eliminatòria) ──────────────────────────────────────────
 async function loadBetForm() {
