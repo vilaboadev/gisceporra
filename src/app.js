@@ -431,7 +431,7 @@ async function loadGroupPredictionDetails() {
   if (!el) return;
 
   if (!supabase) {
-    el.innerHTML = '<p class="muted">Connecta't a Supabase per veure les prediccions.</p>';
+    el.innerHTML = `<p class="muted">Connecta't a Supabase per veure les prediccions.</p>`;
     return;
   }
 
