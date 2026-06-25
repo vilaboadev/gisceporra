@@ -26,7 +26,7 @@
   --nav-h: 66px;
   --radius: 12px;
   --radius-sm: 8px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 body {
@@ -476,7 +476,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .standings-table td:first-child { text-align: left; }
-.standings-table td:nth-child(2) { text-align: right; font-weight: 500; }
+.standings-table td:nth-child(2) { text-align: left; font-weight: 500; }
 .standings-table tr:last-child td { border-bottom: none; }
 .standings-table tr.qualified td:first-child { color: var(--green); }
 .standings-pts { font-weight: 700; }
@@ -528,3 +528,21 @@ body {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ─── Header right ──────────────────────────────── */
+.header-right { display: flex; align-items: center; gap: .5rem; }
+#info-btn { font-weight: 700; font-size: 1rem; }
+
+/* ─── Info card ─────────────────────────────────── */
+.info-card { padding: 1.5rem; max-width: 640px; margin: 0 auto; }
+.info-card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+.info-card h3 { font-size: .9rem; color: var(--accent); margin: 1rem 0 .4rem; }
+.info-card p, .info-card li { font-size: .85rem; color: var(--text2); margin-bottom: .3rem; }
+.info-card ul { padding-left: 1.2rem; margin-bottom: .5rem; }
+.info-tbl { width: 100%; border-collapse: collapse; margin: .5rem 0; font-size: .8rem; }
+.info-tbl th, .info-tbl td { padding: .3rem .5rem; border-bottom: 1px solid var(--border); text-align: center; }
+.info-tbl th { color: var(--text3); font-weight: 600; }
+.info-close { text-align: center; margin-top: 1rem; }
+.info-close .btn-primary { max-width: 200px; margin: 0 auto; }
+.info-card .pts-badge { display: inline-block; width: 20px; height: 20px; line-height: 20px; font-size: .7rem; }
+.info-card .pred-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 2px; }

@@ -127,6 +127,46 @@ $('logout-btn').addEventListener('click', () => {
   showLogin();
 });
 
+$('info-btn').addEventListener('click', toggleInfo);
+
+function toggleInfo() {
+  const infoEl = $('home-info');
+  if (!infoEl) return;
+  const hidden = infoEl.classList.toggle('hidden');
+  if (!hidden) {
+    infoEl.innerHTML = `<div class="info-card card">
+      <h2>📋 Com funciona Gisceporra</h2>
+      <h3>Fase de Grups</h3>
+      <p>Per cada grup (A–L), has predit quins equips quedaran <strong>1r, 2n i 3r</strong>. Quan un grup acabi (3 partits per equip), es calculen els punts:</p>
+      <ul>
+        <li>Equip al <strong>top 3</strong> (posició incorrecta): <span class="pts-badge pts-yellow">5</span> punts</li>
+        <li>Equip al top 3 <strong>en la posició exacta</strong>: <span class="pts-badge pts-green">10</span> punts</li>
+      </ul>
+
+      <h3>Fase Eliminatòria</h3>
+      <p>Un cop definits els emparellaments, pots predir el resultat final de cada partit (incloent pròrroga). Si predius empat, has d'escollir qui passa als penals.</p>
+      <table class="info-tbl">
+        <thead><tr><th>Ronda</th><th>Guanyador</th><th>Resultat exacte</th></tr></thead>
+        <tbody>
+          <tr><td>Setzens/Vuitens</td><td>10 pts</td><td>20 pts</td></tr>
+          <tr><td>Quarts de final</td><td>15 pts</td><td>30 pts</td></tr>
+          <tr><td>Semifinals</td><td>20 pts</td><td>40 pts</td></tr>
+          <tr><td>Final</td><td>30 pts</td><td>50 pts</td></tr>
+        </tbody>
+      </table>
+
+      <h3>🔮 Bola de Cristal</h3>
+      <p>Si vas predir el <strong>campió del món</strong> a la fase de grups i l'encertes: <strong class="pts-badge pts-green" style="display:inline-block;margin:0 4px">+100</strong> punts extra!</p>
+
+      <h3>📊 Consulta els teus pronòstics</h3>
+      <p>A la pestanya <strong>Mundial → Grups</strong> pots veure les teves prediccions amb colors: <span class="pred-dot dot-green"></span> encert exacte (10pts), <span class="pred-dot dot-yellow"></span> al top3 (5pts), <span class="pred-dot dot-red"></span> sense punts.</p>
+
+      <p class="info-close"><button class="btn-primary btn-done" onclick="document.getElementById('home-info').classList.add('hidden')">Entès!</button></p>
+    </div>`;
+    navigate('principal');
+  }
+}
+
 // ── Screen: Principal ─────────────────────────────────────────────────────
 async function fetchWCCached() {
   const hasLive = wc?.matches?.some(m => m.status === 'IN_PLAY' || m.status === 'PAUSED');
@@ -329,11 +369,21 @@ async function loadRanking() {
       if (!wc) wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
       const finishedMatches = wc.matches.filter(m => m.status === 'FINISHED' && m.stage !== 'GROUP_STAGE');
 
-      // Build map of actual top3 per group from ESPN standings
+      // Build map of actual top3 per closed group from ESPN standings
       const actualTop3ByGroup = {};
+      const closedGroups = new Set();
       for (const s of (wc.standings ?? [])) {
         if (s.type !== 'TOTAL') continue;
         const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
+        const table = s.table ?? [];
+        const allPlayed3 = table.every(t => t.playedGames === 3);
+        if (allPlayed3 && table.length >= 4) closedGroups.add(groupKey);
+      }
+
+      for (const s of (wc.standings ?? [])) {
+        if (s.type !== 'TOTAL') continue;
+        const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
+        if (!closedGroups.has(groupKey)) continue;
         actualTop3ByGroup[groupKey] = (s.table ?? [])
           .filter(t => t.position >= 1 && t.position <= 3)
           .map(t => t.team?.name)
