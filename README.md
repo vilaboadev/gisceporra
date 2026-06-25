@@ -31,7 +31,7 @@ Porra interna del Mundial 2026 per a l'equip de Gisce.
 **Apostes eliminatòria**
 - Un cop es coneixen els emparellaments, pots predir el resultat de cada partit
 - Indica els gols de cada equip (resultat final, incloent pròrroga si n'hi ha)
-- Si prediues empat, has d'escollir quin equip passa als penals
+- Si predius empat, has d'escollir quin equip passa l'eliminatòria
 
 ### 🌍 Mundial
 - **Partits**: en joc → propers (amb dia i hora local) → resultats passats
