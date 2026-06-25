@@ -13,8 +13,45 @@ const KNOCKOUT_POINTS = {
 export function calculateGroupPoints(predictedTop3 = [], actualTop3 = []) {
   return predictedTop3.reduce((acc, team, index) => {
     if (!actualTop3.includes(team)) return acc;
-    return acc + 5 + (actualTop3[index] === team ? 10 : 0);
+    return acc + 5 + (actualTop3[index] === team ? 5 : 0);
   }, 0);
+}
+
+/**
+ * Retorna desglossament per equip de la puntuació d'un grup.
+ * @param {string[]} actualOrder - L'ordre real complet (1r, 2n, 3r, 4t...)
+ * @param {{pred_1st?: string, pred_2nd?: string, pred_3rd?: string}} prediction
+ * @returns {{position: number, team: string, predicted: number|null, points: number, classified: boolean}[]}
+ */
+export function calculateGroupPointsDetailed(actualOrder = [], prediction = {}) {
+  const predMap = {
+    1: prediction.pred_1st,
+    2: prediction.pred_2nd,
+    3: prediction.pred_3rd,
+  };
+  const predToPos = {};
+  for (const [pos, team] of Object.entries(predMap)) {
+    if (team) predToPos[team] = Number(pos);
+  }
+
+  const actualTop3 = actualOrder.slice(0, 3);
+
+  return actualOrder.map((team, i) => {
+    const position = i + 1;
+    const predicted = predToPos[team] ?? null;
+    const inTop3 = actualTop3.includes(team);
+    const exact = predicted === position;
+    let points = 0;
+    if (inTop3 && predicted !== null) points += 5;
+    if (exact) points += 5;
+    return {
+      position,
+      team,
+      predicted,
+      points,
+      classified: position <= 2,
+    };
+  });
 }
 
 export function calculateKnockoutPoints(prediction, result) {

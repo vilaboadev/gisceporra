@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS public.group_results (
   actual_1st  TEXT,
   actual_2nd  TEXT,
   actual_3rd  TEXT,
+  actual_4th  TEXT,              -- 4t lloc (per mostrar l'ordre complet)
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
