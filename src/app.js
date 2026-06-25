@@ -633,6 +633,8 @@ window.showPlayerPronos = async function(username) {
 
     // Group bets (closed only)
     if (predictions.length && closedGroups.size) {
+      const sorted = predictions.filter(p => closedGroups.has(p.group_name))
+        .sort((a, b) => a.group_name.localeCompare(b.group_name));
       html += '<h4 class="section-h">Fase de Grups</h4>';
       for (const pred of sorted) {
         if (!closedGroups.has(pred.group_name)) continue;
