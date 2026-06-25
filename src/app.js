@@ -6,6 +6,7 @@ import {
   standingsHtml,
   knockoutBracketHtml,
   formatMatchDateTime,
+  isPlaceholderName,
 } from './mundial.js';
 import { teamWithFlag, getFlag } from './flags.js';
 
@@ -190,13 +191,16 @@ async function loadHome() {
     }
   }, refreshIn);
 
-  // Pending bets alert
+  // Pending bets alert (exclou partits amb contendents per definir)
   if (currentUser && supabase) {
     const knockoutUpcoming = upcoming.filter(m => m.stage && m.stage !== 'GROUP_STAGE');
     if (knockoutUpcoming.length > 0) {
       const { data: myBets } = await supabase.from('apuestas').select('match_key').eq('username', currentUser.username);
       const betKeys = new Set((myBets ?? []).map(b => b.match_key));
-      const pending = knockoutUpcoming.filter(m => !betKeys.has(String(m.id)));
+      const pending = knockoutUpcoming.filter(m => !betKeys.has(String(m.id)) &&
+        !isPlaceholderName(m.homeTeam.name) && !isPlaceholderName(m.awayTeam.name));
+      const placeholder = knockoutUpcoming.filter(m => !betKeys.has(String(m.id)) &&
+        (isPlaceholderName(m.homeTeam.name) || isPlaceholderName(m.awayTeam.name)));
       if (pending.length > 0) {
         $('home-alerts').innerHTML = `
           <button class="pending-alert" onclick="navigate('porra')">
@@ -205,6 +209,8 @@ async function loadHome() {
             <br><small>Ves a Porra per predir</small></div>
             <span>→</span>
           </button>`;
+      } else if (placeholder.length > 0) {
+        $('home-alerts').innerHTML = '<p class="ok-msg">⏳ Esperant emparellaments de l\'eliminatòria</p>';
       } else {
         $('home-alerts').innerHTML = '<p class="ok-msg">✅ Apostes al dia</p>';
       }
@@ -512,19 +518,28 @@ async function loadBetForm() {
     (m.status === 'SCHEDULED' || m.status === 'TIMED'));
   const done = knockoutMatches.filter(m => betKeys.has(String(m.id)));
 
+  // Partits amb placeholders (contendents per definir) — NO editables
+  const placeholder = pending.filter(m => isPlaceholderName(m.homeTeam.name) || isPlaceholderName(m.awayTeam.name));
+  const editable = pending.filter(m => !isPlaceholderName(m.homeTeam.name) && !isPlaceholderName(m.awayTeam.name));
+
   let html = '';
 
-  if (pending.length > 0) {
+  if (placeholder.length > 0) {
+    html += '<h3 class="section-h">Emparellaments per definir</h3>';
+    html += placeholder.map(m => betPlaceholderCard(m)).join('');
+  }
+
+  if (editable.length > 0) {
     html += '<h3 class="section-h">Apostes pendents</h3>';
-    html += pending.map(m => betFormCard(m)).join('');
-  } else {
+    html += editable.map(m => betFormCard(m)).join('');
+  } else if (pending.length > 0) {
     html += '<p class="ok-msg">✅ Totes les apostes fetes!</p>';
   }
 
   if (done.length > 0) {
     html += `<details class="done-bets"><summary>Apostes ja enviades (${done.length})</summary>`;
     html += done.map(m => `<div class="done-bet-row">
-      <span>${m.homeTeam.name} vs ${m.awayTeam.name}</span>
+      <span>${teamWithFlag(m.homeTeam.name)} vs ${teamWithFlag(m.awayTeam.name)}</span>
       <span class="muted">✓ enviada</span>
     </div>`).join('');
     html += '</details>';
@@ -558,6 +573,29 @@ async function loadBetForm() {
       await saveBet(form);
     });
   });
+}
+
+function betPlaceholderCard(match) {
+  const d = new Date(match.utcDate);
+  const dateStr = d.toLocaleDateString('ca', { weekday: 'short', day: '2-digit', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
+  return `
+    <div class="bet-form card placeholder-bet">
+      <div class="bet-header">
+        <span class="bet-round">${match.stage?.replace(/_/g,' ') ?? ''}</span>
+        <span class="bet-date muted">${dateStr}</span>
+      </div>
+      <div class="bet-teams">
+        <span class="bet-team-name">${teamWithFlag(match.homeTeam.name)}</span>
+        <div class="bet-score-inputs">
+          <span class="placeholder-score">?</span>
+          <span class="bet-dash">–</span>
+          <span class="placeholder-score">?</span>
+        </div>
+        <span class="bet-team-name right">${teamWithFlag(match.awayTeam.name)}</span>
+      </div>
+      <p class="placeholder-hint muted">⏳ Emparellament per definir</p>
+    </div>`;
 }
 
 function betFormCard(match) {

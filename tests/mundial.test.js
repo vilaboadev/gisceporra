@@ -436,6 +436,7 @@ test('fetchWCData retorna arrays buits si tots els endpoints fallen', async () =
 // flags.js — formatPlaceholder i teamWithFlag
 // ---------------------------------------------------------------------------
 import { formatPlaceholder, teamWithFlag, getFlag } from '../src/flags.js';
+import { isPlaceholderName } from '../src/mundial.js';
 
 test('formatPlaceholder converteix Group Winner a 1r', () => {
   assert.equal(formatPlaceholder('Group A Winner'), '🏆 Grup A · 1r');
@@ -488,4 +489,45 @@ test('getFlag retorna string buit per noms desconeguts', () => {
   assert.equal(getFlag('Unknown Team'), '');
   assert.equal(getFlag(''), '');
   assert.equal(getFlag(null), '');
+});
+
+test('isPlaceholderName retorna true per Group A Winner', () => {
+  assert.equal(isPlaceholderName('Group A Winner'), true);
+});
+
+test('isPlaceholderName retorna true per Group B 2nd Place', () => {
+  assert.equal(isPlaceholderName('Group B 2nd Place'), true);
+});
+
+test('isPlaceholderName retorna true per Round of 32 1 Winner', () => {
+  assert.equal(isPlaceholderName('Round of 32 1 Winner'), true);
+});
+
+test('isPlaceholderName retorna true per Quarterfinal 2 Winner', () => {
+  assert.equal(isPlaceholderName('Quarterfinal 2 Winner'), true);
+});
+
+test('isPlaceholderName retorna true per Semifinal 1 Winner', () => {
+  assert.equal(isPlaceholderName('Semifinal 1 Winner'), true);
+});
+
+test('isPlaceholderName retorna true per Semifinal 1 Loser', () => {
+  assert.equal(isPlaceholderName('Semifinal 1 Loser'), true);
+});
+
+test('isPlaceholderName retorna true per Third Place Group A/B', () => {
+  assert.equal(isPlaceholderName('Third Place Group A/B'), true);
+});
+
+test('isPlaceholderName retorna false per noms reals', () => {
+  assert.equal(isPlaceholderName('Spain'), false);
+  assert.equal(isPlaceholderName('Brazil'), false);
+  assert.equal(isPlaceholderName('England'), false);
+  assert.equal(isPlaceholderName('United States'), false);
+});
+
+test('isPlaceholderName retorna false per buit/null', () => {
+  assert.equal(isPlaceholderName(''), false);
+  assert.equal(isPlaceholderName(null), false);
+  assert.equal(isPlaceholderName(undefined), false);
 });
