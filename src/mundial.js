@@ -157,9 +157,10 @@ export function standingsGroupHtml(group, predictions = {}) {
         const predPos = pred?.predicted ?? '–';
         const predClosed = pred?.closed ?? false;
         let dotClass = 'dot-red';
-        if (p >= 10) dotClass = 'dot-green';
+        if (!predClosed) dotClass = 'dot-pending';
+        else if (p >= 10) dotClass = 'dot-green';
         else if (p >= 5) dotClass = 'dot-yellow';
-        const predCell = predClosed
+        const predCell = predPos !== '–'
           ? `<span class="pred-dot ${dotClass}"></span>${predPos}`
           : '–';
 

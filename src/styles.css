@@ -489,6 +489,7 @@ body {
 .pred-dot.dot-green { background: var(--green); }
 .pred-dot.dot-yellow { background: var(--orange); }
 .pred-dot.dot-red { background: var(--text3); opacity: .5; }
+.pred-dot.dot-pending { background: transparent; border: 1px solid var(--border); }
 .std-w { color: var(--green); font-weight: 600; }
 .std-d { color: var(--gold); font-weight: 600; }
 .std-l { color: var(--live); font-weight: 600; }

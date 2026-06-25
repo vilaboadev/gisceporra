@@ -345,6 +345,7 @@ async function loadRanking() {
 
   try {
     let ranking = [];
+    const closedGroups = new Set();
 
     if (supabase) {
       const [partRes, grpResRes, champPredRes, apostesRes, participRes] = await Promise.all([
@@ -359,7 +360,7 @@ async function loadRanking() {
       const grpResults = grpResRes.data ?? [];
       const champPreds = champPredRes.data ?? [];
       const apostes = apostesRes.data ?? [];
-      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'test' || currentUser?.username === 'test');
+      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'TST' || currentUser?.username === 'TST');
 
       // Get actual champion from group_results where group_name = 'campió'
       const campioRow = grpResults.find(r => r.group_name === 'campio');
