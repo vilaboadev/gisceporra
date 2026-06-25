@@ -359,7 +359,7 @@ async function loadRanking() {
       const grpResults = grpResRes.data ?? [];
       const champPreds = champPredRes.data ?? [];
       const apostes = apostesRes.data ?? [];
-      const participantsList = participRes.data ?? [];
+      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'test' || currentUser?.username === 'test');
 
       // Get actual champion from group_results where group_name = 'campió'
       const campioRow = grpResults.find(r => r.group_name === 'campio');
@@ -437,8 +437,44 @@ async function loadRanking() {
 
     el.innerHTML = rankingHtml(ranking, currentUser?.username);
 
+    // Update cache tables in background
+    saveRankingCache(ranking, closedGroups);
+
   } catch (err) {
     el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+  }
+}
+
+// ── Cache: save ranking and group results to Supabase ────────────────────
+async function saveRankingCache(ranking, closedGroups) {
+  if (!supabase || !wc) return;
+  try {
+    // Save final group standings for closed groups
+    for (const s of (wc.standings ?? [])) {
+      if (s.type !== 'TOTAL') continue;
+      const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
+      if (!closedGroups.has(groupKey)) continue;
+      const top3 = (s.table ?? []).filter(t => t.position >= 1 && t.position <= 3);
+      const fourth = (s.table ?? []).find(t => t.position === 4);
+
+      await supabase.from('group_results').upsert({
+        group_name: groupKey,
+        actual_1st: top3[0]?.team?.name ?? null,
+        actual_2nd: top3[1]?.team?.name ?? null,
+        actual_3rd: top3[2]?.team?.name ?? null,
+        actual_4th: fourth?.team?.name ?? null,
+      }, { onConflict: 'group_name' });
+    }
+
+    // Save ranking
+    for (const r of ranking) {
+      await supabase.from('clasificacion').upsert({
+        username: r.username,
+        puntos: r.points,
+      }, { onConflict: 'username' });
+    }
+  } catch (e) {
+    // Non-critical: fail silently
   }
 }
 
@@ -531,11 +567,8 @@ async function loadBetForm() {
     const lockedBets = done.filter(m => !canEdit(m));
     if (editableBets.length > 0) {
       html += '<h3 class="section-h">Pronòstics per revisar</h3>';
-      html += editableBets.map(m => {
-        const timeLeft = Math.floor((new Date(m.utcDate).getTime() - Date.now()) / 1000 / 60);
-        const msg = `⏳ Pots modificar-lo fins ${timeLeft > 60 ? Math.floor(timeLeft/60) + 'h' : timeLeft + 'min'} abans del partit`;
-        return betFormCard(m) + `<p class="muted edit-hint">${msg}</p>`;
-      }).join('');
+      html += editableBets.map(m => betFormCard(m)).join('');
+      html += '<p class="muted edit-hint">⏳ Pots modificar-los fins 2h abans del partit</p>';
     }
     if (lockedBets.length > 0) {
       html += `<details class="done-bets"><summary>Pronòstics tancats (${lockedBets.length})</summary>`;
@@ -555,8 +588,8 @@ async function loadBetForm() {
 
   container.innerHTML = html;
 
-  // Wire up bet forms
-  container.querySelectorAll('.bet-form').forEach(form => {
+  // Wire up bet forms (only real <form> elements, not placeholder divs)
+  container.querySelectorAll('form.bet-form').forEach(form => {
     const homeIn = form.querySelector('.bet-home');
     const awayIn = form.querySelector('.bet-away');
     const tieGroup = form.querySelector('.tie-winner-group');
