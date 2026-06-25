@@ -192,7 +192,7 @@ async function loadHome() {
   // ── User mini-ranking widget ──────────────────────────────────────────
   loadUserWidget();
 
-  // ── Live / Next match ─────────────────────────────────────────────────
+  // ── Live / Today's matches ────────────────────────────────────────────
   if (live.length > 0) {
     $('home-live').innerHTML = `
       <div class="live-alert">
@@ -204,20 +204,50 @@ async function loadHome() {
             <span class="lm-team right">${teamWithFlag(m.awayTeam.name)}</span>
           </div>`).join('')}
       </div>`;
-  } else if (upcoming[0]) {
-    const n = upcoming[0];
-    const d = new Date(n.utcDate);
-    $('home-live').innerHTML = `
-      <div class="next-match-card">
-        <p class="tag">Pròxim partit</p>
-        <div class="nm-row">
-          <span>${teamWithFlag(n.homeTeam.name)}</span>
-          <span class="vs">vs</span>
-          <span>${teamWithFlag(n.awayTeam.name)}</span>
-        </div>
-        <p class="nm-time">${d.toLocaleDateString('ca',{weekday:'short',day:'2-digit',month:'short'})} · ${d.toLocaleTimeString('ca',{hour:'2-digit',minute:'2-digit'})}</p>
-      </div>`;
   } else {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const todayMatches = upcoming.filter(m => {
+      const d = new Date(m.utcDate);
+      return d >= today && d < tomorrow;
+    });
+    if (todayMatches.length > 0) {
+      $('home-live').innerHTML = `
+        <div class="today-matches card">
+          <p class="tag">Partits d'avui</p>
+          ${todayMatches.map(m => {
+            const d = new Date(m.utcDate);
+            const time = d.toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
+            return `<div class="today-match-row">
+              <span class="lm-team">${teamWithFlag(m.homeTeam.name)}</span>
+              <span class="today-time">${time}</span>
+              <span class="lm-team right">${teamWithFlag(m.awayTeam.name)}</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+    } else {
+      const next2 = upcoming.slice(0, 2);
+      if (next2.length > 0) {
+        $('home-live').innerHTML = `
+          <div class="next-matches-card card">
+            <p class="tag">Pròxims partits</p>
+            ${next2.map(m => {
+              const d = new Date(m.utcDate);
+              const dateStr = d.toLocaleDateString('ca', { weekday: 'short', day: '2-digit', month: 'short' });
+              const time = d.toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
+              return `<div class="next-match-row">
+                <div class="nm-teams"><span>${teamWithFlag(m.homeTeam.name)}</span> <span class="vs">vs</span> <span>${teamWithFlag(m.awayTeam.name)}</span></div>
+                <div class="nm-time">${dateStr} · ${time}</div>
+              </div>`;
+            }).join('')}
+          </div>`;
+      } else {
+        $('home-live').innerHTML = '';
+      }
+    }
+  }
     $('home-live').innerHTML = '';
   }
 
@@ -606,7 +636,7 @@ window.showPlayerPronos = async function(username) {
     // Group bets (closed only)
     if (predictions.length && closedGroups.size) {
       html += '<h4 class="section-h">Fase de Grups</h4>';
-      for (const pred of predictions) {
+      for (const pred of sorted) {
         if (!closedGroups.has(pred.group_name)) continue;
         const s = wc.standings.find(st => {
           const k = (st.group ?? '').replace(/^(Group |Grup )/i, '');

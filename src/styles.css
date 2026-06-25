@@ -570,3 +570,17 @@ body {
 .bet-detail-row { padding: .5rem .75rem; margin-bottom: .5rem; }
 .bet-detail-teams { font-size: .85rem; margin-bottom: .15rem; }
 .bold { font-weight: 700; }
+
+/* ─── Home: Today & Next matches ─────────────────── */
+.today-matches { padding: .75rem 1rem; margin-bottom: 1rem; }
+.today-match-row { display: flex; align-items: center; justify-content: space-between; padding: .4rem 0; border-bottom: 1px solid var(--border); }
+.today-match-row:last-child { border-bottom: none; }
+.today-match-row .lm-team { flex: 0 0 42%; font-size: .85rem; }
+.today-match-row .lm-team.right { text-align: right; }
+.today-time { font-weight: 700; color: var(--accent); font-size: .85rem; }
+
+.next-matches-card { padding: .75rem 1rem; margin-bottom: 1rem; }
+.next-match-row { padding: .4rem 0; border-bottom: 1px solid var(--border); }
+.next-match-row:last-child { border-bottom: none; }
+.nm-teams { display: flex; align-items: center; gap: .5rem; font-size: .85rem; margin-bottom: .15rem; }
+.nm-time { font-size: .8rem; color: var(--text3); }
