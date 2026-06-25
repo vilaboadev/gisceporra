@@ -399,7 +399,7 @@ async function loadPlayersTab() {
     const { data: participants } = await supabase
       .from('participants')
       .select('username, display_name')
-      .neq('username', 'test')
+      .neq('username', 'TST')
       .order('username');
     if (!participants?.length) {
       list.innerHTML = '<p class="muted">No hi ha jugadors.</p>';
