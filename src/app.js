@@ -295,7 +295,7 @@ async function loadUserWidget() {
 
 // ── Screen: Porra (Ranking + Apostes) ────────────────────────────────────
 async function loadPorra() {
-  await Promise.all([loadRanking(), loadGroupPredictionDetails(), loadBetForm()]);
+  await Promise.all([loadRanking(), loadBetForm()]);
 }
 
 async function loadRanking() {
@@ -376,81 +376,6 @@ async function loadRanking() {
 
     el.innerHTML = rankingHtml(ranking, currentUser?.username);
 
-  } catch (err) {
-    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
-  }
-}
-
-// ── Group Prediction Details ─────────────────────────────────────────────
-function groupPredictionTableHtml(groupResults, predictions) {
-  if (!groupResults?.length) return '<p class="muted">No hi ha resultats de grups disponibles.</p>';
-
-  const groups = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-
-  let html = '';
-  for (const g of groups) {
-    const res = groupResults.find(r => r.group_name === g);
-    if (!res) continue;
-
-    const actualOrder = [res.actual_1st, res.actual_2nd, res.actual_3rd, res.actual_4th].filter(Boolean);
-    if (!actualOrder.length) continue;
-
-    const pred = predictions?.find(p => p.group_name === g);
-    const details = calculateGroupPointsDetailed(actualOrder, pred ?? {});
-    const total = details.reduce((s, r) => s + r.points, 0);
-
-    html += `<div class="group-pred-card card">
-      <div class="gpc-header">
-        <span class="gpc-title">Grup ${g}</span>
-        <span class="gpc-total">${total} pts</span>
-      </div>
-      <table class="group-pred-table">
-        <thead><tr>
-          <th>#</th>
-          <th>Equip</th>
-          <th>Pronòstic</th>
-          <th>Punts</th>
-          <th>Class.</th>
-        </tr></thead>
-        <tbody>
-        ${details.map(r => {
-          const classif = r.classified ? '✅ Sí' : '❌ No';
-          const predStr = r.predicted !== null ? r.predicted : '–';
-          return `<tr class="${r.predicted === r.position ? 'exact-row' : ''}">
-            <td class="gpc-pos">${r.position}</td>
-            <td>${teamWithFlag(r.team)}</td>
-            <td class="gpc-pred">${predStr}</td>
-            <td class="gpc-pts">${r.points || '–'}</td>
-            <td class="gpc-class">${classif}</td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table>
-    </div>`;
-  }
-
-  return html || '<p class="muted">No hi ha grups amb resultats disponibles.</p>';
-}
-
-async function loadGroupPredictionDetails() {
-  const el = $('group-predictions-details');
-  if (!el) return;
-
-  if (!supabase) {
-    el.innerHTML = `<p class="muted">Connecta't a Supabase per veure les prediccions.</p>`;
-    return;
-  }
-
-  try {
-    const [grpResRes, partRes] = await Promise.all([
-      supabase.from('group_results').select('*'),
-      supabase.from('group_predictions').select('*').eq('username', currentUser?.username),
-    ]);
-
-    const groupResults = grpResRes.data ?? [];
-    const predictions = partRes.data ?? [];
-
-    el.innerHTML = groupPredictionTableHtml(groupResults, predictions);
   } catch (err) {
     el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
   }
@@ -713,8 +638,44 @@ function renderMundialTab(tab) {
   if (!wc) return;
   const { matches, standings } = wc;
   if (tab === 'partits') $('tab-partits').innerHTML = matchesSectionHtml(matches);
-  else if (tab === 'grups') $('tab-grups').innerHTML = standingsHtml(standings);
+  else if (tab === 'grups') {
+    if (!supabase || !currentUser) {
+      $('tab-grups').innerHTML = standingsHtml(standings);
+    } else {
+      loadGroupStandingsWithPredictions(standings);
+    }
+  }
   else if (tab === 'bracket') $('tab-bracket').innerHTML = knockoutBracketHtml(matches);
+}
+
+async function loadGroupStandingsWithPredictions(standings) {
+  const el = $('tab-grups');
+  try {
+    const [grpResRes, partRes] = await Promise.all([
+      supabase.from('group_results').select('*'),
+      supabase.from('group_predictions').select('*').eq('username', currentUser.username),
+    ]);
+
+    const groupResults = grpResRes.data ?? [];
+    const predictions = partRes.data ?? [];
+
+    // Build predictions lookup: { groupName: { teamName: { predicted, points } } }
+    const predLookup = {};
+    for (const res of groupResults) {
+      const actualOrder = [res.actual_1st, res.actual_2nd, res.actual_3rd, res.actual_4th].filter(Boolean);
+      if (!actualOrder.length) continue;
+      const pred = predictions.find(p => p.group_name === res.group_name);
+      const details = calculateGroupPointsDetailed(actualOrder, pred ?? {});
+      predLookup[res.group_name] = {};
+      for (const d of details) {
+        predLookup[res.group_name][d.team] = { predicted: d.predicted, points: d.points };
+      }
+    }
+
+    el.innerHTML = standingsHtml(standings, predLookup);
+  } catch {
+    el.innerHTML = standingsHtml(standings);
+  }
 }
 
 // Tab switching for Mundial

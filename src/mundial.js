@@ -1,4 +1,5 @@
-import { teamWithFlag } from './flags.js';
+import { formatPlaceholder, teamWithFlag } from './flags.js';
+import { calculateGroupPointsDetailed } from './scoring.js';
 
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
@@ -144,12 +145,29 @@ export function matchCardHtml(match) {
   </div>`;
 }
 
-export function standingsGroupHtml(group) {
+export function standingsGroupHtml(group, predictions = {}) {
   const rows = (group.table ?? [])
     .map(
-      (row, i) => `<tr class="${i < 2 ? 'qualified' : ''}">
-      <td class="std-pos">${i < 2 ? ['🟢','🟢'][i] : (i === 2 ? '🟡' : '🔴')} ${row.position}</td>
-      <td>${teamWithFlag(row.team?.name)}</td>
+      (row, i) => {
+        const teamName = row.team?.name ?? '';
+        const pred = predictions[teamName]; // { predicted, points } or undefined
+
+        let ptsBadge = '';
+        if (pred) {
+          const p = pred.points;
+          const cls = p >= 10 ? 'pts-green' : p >= 5 ? 'pts-yellow' : 'pts-red';
+          ptsBadge = `<span class="pts-badge ${cls}">${p}</span>`;
+        } else {
+          ptsBadge = '<span class="pts-badge pts-red">0</span>';
+        }
+
+        const predStr = pred?.predicted ?? '–';
+
+        return `<tr class="${i < 2 ? 'qualified' : ''}">
+      <td class="std-pos">${row.position}</td>
+      <td>${teamWithFlag(teamName)}</td>
+      <td class="std-pred">${predStr}</td>
+      <td class="std-pts-badge">${ptsBadge}</td>
       <td>${row.playedGames}</td>
       <td class="${row.won > 0 ? 'std-w' : ''}">${row.won}</td>
       <td class="${row.draw > 0 ? 'std-d' : ''}">${row.draw}</td>
@@ -158,15 +176,18 @@ export function standingsGroupHtml(group) {
       <td>${row.goalsAgainst}</td>
       <td>${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}</td>
       <td class="standings-pts">${row.points}</td>
-    </tr>`,
+    </tr>`;
+      },
     )
     .join('');
 
   return `<div class="standings-group">
     <div class="standings-group-name">${group.group ?? 'Grup'}</div>
+    <div class="standings-table-wrap">
     <table class="standings-table">
       <thead><tr>
         <th>#</th><th>Equip</th>
+        <th>Pron.</th><th>Pts</th>
         <th title="Partits jugats">PJ</th>
         <th title="Victòries">V</th>
         <th title="Empats">E</th>
@@ -178,14 +199,20 @@ export function standingsGroupHtml(group) {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    </div>
   </div>`;
 }
 
-export function standingsHtml(standings) {
+export function standingsHtml(standings, allPredictions = {}) {
   if (!standings?.length) return '<p class="muted">No hi ha dades de classificació.</p>';
   const groups = standings.filter((s) => s.type === 'TOTAL');
   if (!groups.length) return '<p class="muted">No hi ha dades de grups disponibles.</p>';
-  return groups.map(standingsGroupHtml).join('');
+  return groups.map(s => {
+    // Normalitza "Group A" o "Grup A" a "A" per fer lookup
+    const groupKey = (s.group ?? '').replace(/^(Group|Grup)\s+/i, '');
+    const groupPreds = allPredictions[groupKey] ?? {};
+    return standingsGroupHtml(s, groupPreds);
+  }).join('');
 }
 
 export function matchesSectionHtml(matches) {
