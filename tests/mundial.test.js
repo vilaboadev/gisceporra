@@ -144,16 +144,16 @@ const makeMatch = (overrides = {}) => ({
   stage: 'GROUP_STAGE',
   matchday: 1,
   utcDate: '2026-06-15T18:00:00Z',
-  homeTeam: { name: 'Espanya' },
-  awayTeam: { name: 'Brasil' },
+  homeTeam: { name: 'Spain' },
+  awayTeam: { name: 'Brazil' },
   score: { fullTime: { home: 2, away: 1 } },
   ...overrides,
 });
 
 test('matchCardHtml conté noms dels equips', () => {
   const html = matchCardHtml(makeMatch());
-  assert.ok(html.includes('Espanya'));
-  assert.ok(html.includes('Brasil'));
+  assert.ok(html.includes('Spain'));
+  assert.ok(html.includes('Brazil'));
 });
 
 test('matchCardHtml té classe finished per FINISHED', () => {
@@ -190,7 +190,7 @@ test('matchCardHtml mostra data i hora per partits programats', () => {
 test('matchCardHtml partits programats mostren els dos equips en la mateixa fila', () => {
   const html = matchCardHtml(makeMatch({ status: 'SCHEDULED' }));
   assert.ok(html.includes('match-vs'));
-  assert.ok(html.includes('Espanya') && html.includes('Brasil'));
+  assert.ok(html.includes('Spain') && html.includes('Brazil'));
 });
 
 // ---------------------------------------------------------------------------
@@ -198,27 +198,27 @@ test('matchCardHtml partits programats mostren els dos equips en la mateixa fila
 // ---------------------------------------------------------------------------
 
 const makeGroup = () => ({
-  group: 'Grup A',
+  group: 'Group A',
   type: 'TOTAL',
   table: [
-    { position: 1, team: { name: 'Espanya' }, playedGames: 3, won: 3, draw: 0, lost: 0, goalsFor: 9, goalsAgainst: 1, goalDifference: 8, points: 9 },
-    { position: 2, team: { name: 'Brasil' }, playedGames: 3, won: 2, draw: 0, lost: 1, goalsFor: 6, goalsAgainst: 3, goalDifference: 3, points: 6 },
-    { position: 3, team: { name: 'Alemanya' }, playedGames: 3, won: 1, draw: 0, lost: 2, goalsFor: 3, goalsAgainst: 6, goalDifference: -3, points: 3 },
-    { position: 4, team: { name: 'Japó' }, playedGames: 3, won: 0, draw: 0, lost: 3, goalsFor: 1, goalsAgainst: 9, goalDifference: -8, points: 0 },
+    { position: 1, team: { name: 'Spain' }, playedGames: 3, won: 3, draw: 0, lost: 0, goalsFor: 9, goalsAgainst: 1, goalDifference: 8, points: 9 },
+    { position: 2, team: { name: 'Brazil' }, playedGames: 3, won: 2, draw: 0, lost: 1, goalsFor: 6, goalsAgainst: 3, goalDifference: 3, points: 6 },
+    { position: 3, team: { name: 'Germany' }, playedGames: 3, won: 1, draw: 0, lost: 2, goalsFor: 3, goalsAgainst: 6, goalDifference: -3, points: 3 },
+    { position: 4, team: { name: 'Japan' }, playedGames: 3, won: 0, draw: 0, lost: 3, goalsFor: 1, goalsAgainst: 9, goalDifference: -8, points: 0 },
   ],
 });
 
 test('standingsGroupHtml conté el nom del grup', () => {
   const html = standingsGroupHtml(makeGroup());
-  assert.ok(html.includes('Grup A'));
+  assert.ok(html.includes('Group A'));
 });
 
 test('standingsGroupHtml conté tots els equips', () => {
   const html = standingsGroupHtml(makeGroup());
-  assert.ok(html.includes('Espanya'));
-  assert.ok(html.includes('Brasil'));
-  assert.ok(html.includes('Alemanya'));
-  assert.ok(html.includes('Japó'));
+  assert.ok(html.includes('Spain'));
+  assert.ok(html.includes('Brazil'));
+  assert.ok(html.includes('Germany'));
+  assert.ok(html.includes('Japan'));
 });
 
 test('standingsGroupHtml marca els dos primers com qualified', () => {
@@ -287,7 +287,7 @@ test('matchesSectionHtml inclou partits FINISHED de fase de grups', () => {
     makeMatch({ id: 2, stage: 'GROUP_STAGE', matchday: 1, status: 'FINISHED', homeTeam: { name: 'França' }, awayTeam: { name: 'Portugal' }, score: { fullTime: { home: 1, away: 0 } } }),
   ];
   const html = matchesSectionHtml(matches);
-  assert.ok(html.includes('Espanya') || html.includes('França'));
+  assert.ok(html.includes('Spain') || html.includes('France'));
 });
 
 test('matchesSectionHtml mostra seccio propers per partits programats', () => {
@@ -333,7 +333,7 @@ test('knockoutBracketHtml mostra partits de semis', () => {
 
 test('knockoutBracketHtml marca el guanyador del partit', () => {
   const matches = [
-    makeMatch({ id: 1, stage: 'FINAL', status: 'FINISHED', homeTeam: { name: 'Espanya' }, awayTeam: { name: 'Brasil' }, score: { fullTime: { home: 3, away: 1 } } }),
+    makeMatch({ id: 1, stage: 'FINAL', status: 'FINISHED', homeTeam: { name: 'Spain' }, awayTeam: { name: 'Brazil' }, score: { fullTime: { home: 3, away: 1 } } }),
   ];
   const html = knockoutBracketHtml(matches);
   assert.ok(html.includes('winner'));

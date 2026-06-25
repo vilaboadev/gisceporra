@@ -29,6 +29,7 @@ const FLAG_MAP = {
   // Grup K
   'Netherlands':            '🇳🇱',
   'Holland':                '🇳🇱',
+  'Països Baixos':          '🇳🇱',
   // Grup L
   'England':                '🇬🇧',
   'Anglaterra':             '🇬🇧',

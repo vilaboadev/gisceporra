@@ -152,22 +152,16 @@ export function standingsGroupHtml(group, predictions = {}) {
         const teamName = row.team?.name ?? '';
         const pred = predictions[teamName]; // { predicted, points } or undefined
 
-        let ptsBadge = '';
-        if (pred) {
-          const p = pred.points;
-          const cls = p >= 10 ? 'pts-green' : p >= 5 ? 'pts-yellow' : 'pts-red';
-          ptsBadge = `<span class="pts-badge ${cls}">${p}</span>`;
-        } else {
-          ptsBadge = '<span class="pts-badge pts-red">0</span>';
-        }
-
-        const predStr = pred?.predicted ?? '–';
+        const p = pred?.points ?? 0;
+        const predPos = pred?.predicted ?? '–';
+        let dotClass = 'dot-red';
+        if (p >= 10) dotClass = 'dot-green';
+        else if (p >= 5) dotClass = 'dot-yellow';
 
         return `<tr class="${i < 2 ? 'qualified' : ''}">
-      <td class="std-pos">${row.position}</td>
       <td>${teamWithFlag(teamName)}</td>
-      <td class="std-pred">${predStr}</td>
-      <td class="std-pts-badge">${ptsBadge}</td>
+      <td class="std-pos">${row.position}</td>
+      <td class="std-pred-cell"><span class="pred-dot ${dotClass}"></span>${predPos}</td>
       <td>${row.playedGames}</td>
       <td class="${row.won > 0 ? 'std-w' : ''}">${row.won}</td>
       <td class="${row.draw > 0 ? 'std-d' : ''}">${row.draw}</td>
@@ -186,8 +180,9 @@ export function standingsGroupHtml(group, predictions = {}) {
     <div class="standings-table-wrap">
     <table class="standings-table">
       <thead><tr>
-        <th>#</th><th>Equip</th>
-        <th>Pron.</th><th>Pts</th>
+        <th>Equip</th>
+        <th title="Posició real">Pos</th>
+        <th title="Pronòstic">Pron.</th>
         <th title="Partits jugats">PJ</th>
         <th title="Victòries">V</th>
         <th title="Empats">E</th>

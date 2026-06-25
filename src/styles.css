@@ -471,18 +471,23 @@ body {
   white-space: nowrap;
 }
 .standings-table th:first-child { text-align: left; }
-.standings-table th:nth-child(2) { text-align: left; }
 .standings-table td {
   padding: .4rem .2rem; text-align: center;
   border-bottom: 1px solid var(--border);
 }
-.standings-table td:first-child { text-align: left; }
-.standings-table td:nth-child(2) { text-align: left; font-weight: 500; }
+.standings-table td:first-child { text-align: left; font-weight: 500; }
 .standings-table tr:last-child td { border-bottom: none; }
 .standings-table tr.qualified td:first-child { color: var(--green); }
 .standings-pts { font-weight: 700; }
 .std-pos { font-size: .8rem; font-weight: 600; white-space: nowrap; }
-.std-pred { font-size: .85rem; font-weight: 700; color: var(--accent); }
+.std-pred-cell { text-align: center; white-space: nowrap; }
+.pred-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 3px; vertical-align: middle;
+}
+.pred-dot.dot-green { background: var(--green); }
+.pred-dot.dot-yellow { background: var(--orange); }
+.pred-dot.dot-red { background: var(--text3); opacity: .5; }
 .std-w { color: var(--green); font-weight: 600; }
 .std-d { color: var(--gold); font-weight: 600; }
 .std-l { color: var(--live); font-weight: 600; }
