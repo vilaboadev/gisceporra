@@ -360,7 +360,7 @@ async function loadRanking() {
       const grpResults = grpResRes.data ?? [];
       const champPreds = champPredRes.data ?? [];
       const apostes = apostesRes.data ?? [];
-      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'TST' || currentUser?.username === 'TST');
+      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'test' || currentUser?.username === 'test');
 
       // Get actual champion from group_results where group_name = 'campió'
       const campioRow = grpResults.find(r => r.group_name === 'campio');
