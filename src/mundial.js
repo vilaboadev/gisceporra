@@ -47,6 +47,15 @@ export const STATUS_LABELS = {
 
 const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
 
+/**
+ * Comprova si un nom d'equip és un placeholder d'ESPN (ex: "Group A Winner").
+ * Útil per saber si un partit eliminatori té els contendents definits.
+ */
+export function isPlaceholderName(name) {
+  if (!name) return false;
+  return /^(Group [A-L]|Round of \d+|Quarterfinal \d+|Semifinal \d+|Third Place Group)/.test(name);
+}
+
 export function formatMatchDateTime(utcDate) {
   if (!utcDate) return '';
   const d = new Date(utcDate);

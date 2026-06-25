@@ -351,6 +351,18 @@ body {
 .bet-dash { color: var(--text3); font-weight: 700; }
 .bet-hint { font-size: .75rem; margin-bottom: .6rem; }
 
+/* Placeholder bet (contendents per definir) */
+.placeholder-bet { opacity: .6; }
+.placeholder-bet .bet-team-name { color: var(--text3); }
+.placeholder-score {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text3);
+  font-size: 1.1rem; font-weight: 700;
+}
+.placeholder-hint { text-align: center; padding: .5rem 0; font-size: .85rem; }
+
 .tie-winner-group { margin-bottom: .75rem; }
 .tie-winner-group label { font-size: .85rem; color: var(--text2); }
 .tie-winner-select {
