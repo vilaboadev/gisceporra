@@ -8,7 +8,7 @@ Porra interna del Mundial 2026 per a l'equip de Gisce.
 
 🔗 **https://vilaboadev.github.io/gisceporra/**
 
-- **Usuari**: les teves inicials (ex: `MVF`)
+- **Usuari**: les teves inicials (ex: `ABC`)
 - **Contrasenya**: les teves inicials (primera vegada)
 
 ---
