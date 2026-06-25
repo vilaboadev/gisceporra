@@ -34,9 +34,9 @@ async function login(username, password) {
   const uname = raw.toUpperCase();
 
   // Usuari test hardcoded — sempre accessible independentment de Supabase
-  const testHash = await hashPwd('test');
-  if (raw.toLowerCase() === 'test' && hash === testHash) {
-    return { username: 'TEST', display_name: 'Test User' };
+  const testHash = await hashPwd('TST');
+  if (raw.toLowerCase() === 'TST' && hash === testHash) {
+    return { username: 'TST', display_name: 'Test User' };
   }
 
   if (supabase) {
@@ -52,7 +52,7 @@ async function login(username, password) {
     return data;
   }
 
-  throw new Error('Usuari o contrasenya incorrectes (mode demo: test/test)');
+  throw new Error('Usuari o contrasenya incorrectes');
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────
@@ -360,7 +360,7 @@ async function loadRanking() {
       const grpResults = grpResRes.data ?? [];
       const champPreds = champPredRes.data ?? [];
       const apostes = apostesRes.data ?? [];
-      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'test' || currentUser?.username === 'test');
+      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'TST' || currentUser?.username === 'TST');
 
       // Get actual champion from group_results where group_name = 'campió'
       const campioRow = grpResults.find(r => r.group_name === 'campio');
@@ -433,7 +433,7 @@ async function loadRanking() {
       }).sort((a, b) => b.points - a.points);
 
     } else {
-      ranking = [{ username: 'TEST', displayName: 'Test User', points: 0 }];
+      ranking = [{ username: 'TST', displayName: 'Test User', points: 0 }];
     }
 
     el.innerHTML = rankingHtml(ranking, currentUser?.username);
