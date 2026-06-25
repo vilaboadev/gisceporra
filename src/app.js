@@ -273,7 +273,7 @@ async function loadHome() {
         (isPlaceholderName(m.homeTeam.name) || isPlaceholderName(m.awayTeam.name)));
       if (pending.length > 0) {
         $('home-alerts').innerHTML = `
-          <button class="pending-alert" onclick="navigate('porra')">
+          <button class="pending-alert" onclick="navigate('porra');document.querySelector('#screen-porra .tab-btn[data-tab=pronostics]')?.click()">
             <span>⚠️</span>
             <div><strong>${pending.length} pronòstic${pending.length > 1 ? 's' : ''} pendent${pending.length > 1 ? 's' : ''}!</strong>
             <br><small>Ves a Porra per predir</small></div>
