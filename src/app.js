@@ -248,8 +248,6 @@ async function loadHome() {
       }
     }
   }
-    $('home-live').innerHTML = '';
-  }
 
   // Auto-refresh: 45s si hi ha partit en viu, 3min si no
   if (homeRefreshTimer) clearTimeout(homeRefreshTimer);
