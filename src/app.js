@@ -363,6 +363,33 @@ function loadPorraTab(tab) {
   else if (tab === 'jugadors') loadPlayersTab();
 }
 
+async function loadPlayersTab() {
+  const list = $('players-list');
+  if (!list || !supabase) return;
+
+  try {
+    const { data: participants } = await supabase
+      .from('participants')
+      .select('username, display_name')
+      .neq('username', 'test')
+      .order('username');
+    if (!participants?.length) {
+      list.innerHTML = '<p class="muted">No hi ha jugadors.</p>';
+      return;
+    }
+
+    list.innerHTML = '<ul class="players-list">' + participants.map(p =>
+      `<li class="ranking-item" onclick="showPlayerPronos('${p.username}')">
+        <span class="rank-name">${p.display_name || p.username}</span>
+        <span class="muted">${p.username}</span>
+        <span class="rank-arrow muted">→</span>
+      </li>`
+    ).join('') + '</ul>';
+  } catch {
+    list.innerHTML = '<p class="muted">Error carregant jugadors.</p>';
+  }
+}
+
 async function loadRanking() {
   const el = $('porra-ranking');
   if (!el) return;
