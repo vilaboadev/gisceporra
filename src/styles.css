@@ -475,7 +475,8 @@ body {
   padding: .4rem .2rem; text-align: center;
   border-bottom: 1px solid var(--border);
 }
-.standings-table td:first-child { text-align: left; font-weight: 500; }
+.standings-table td:first-child { text-align: left; }
+.standings-table td:nth-child(2) { text-align: right; font-weight: 500; }
 .standings-table tr:last-child td { border-bottom: none; }
 .standings-table tr.qualified td:first-child { color: var(--green); }
 .standings-pts { font-weight: 700; }

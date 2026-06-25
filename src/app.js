@@ -195,7 +195,7 @@ async function loadHome() {
   if (currentUser && supabase) {
     const knockoutUpcoming = upcoming.filter(m => m.stage && m.stage !== 'GROUP_STAGE');
     if (knockoutUpcoming.length > 0) {
-      const { data: myBets } = await supabase.from('apuestas').select('match_key').eq('username', currentUser.username);
+      const { data: myBets } = await supabase.from('pronostics').select('match_key').eq('username', currentUser.username);
       const betKeys = new Set((myBets ?? []).map(b => b.match_key));
       const pending = knockoutUpcoming.filter(m => !betKeys.has(String(m.id)) &&
         !isPlaceholderName(m.homeTeam.name) && !isPlaceholderName(m.awayTeam.name));
@@ -205,7 +205,7 @@ async function loadHome() {
         $('home-alerts').innerHTML = `
           <button class="pending-alert" onclick="navigate('porra')">
             <span>⚠️</span>
-            <div><strong>${pending.length} aposta${pending.length > 1 ? 'es' : ''} pendent${pending.length > 1 ? 's' : ''}!</strong>
+            <div><strong>${pending.length} pronòstic${pending.length > 1 ? 's' : ''} pendent${pending.length > 1 ? 's' : ''}!</strong>
             <br><small>Ves a Porra per predir</small></div>
             <span>→</span>
           </button>`;
@@ -224,9 +224,9 @@ async function loadHome() {
     <h3 class="section-h">Últims resultats</h3>
     ${past.map(m => `
       <div class="result-row">
-        <span class="rt">${m.homeTeam.name}</span>
+        <span class="rt">${teamWithFlag(m.homeTeam.name)}</span>
         <span class="rs">${m.score.fullTime.home} – ${m.score.fullTime.away}</span>
-        <span class="rt right">${m.awayTeam.name}</span>
+        <span class="rt right">${teamWithFlag(m.awayTeam.name)}</span>
       </div>`).join('')}` : '';
 }
 
@@ -311,7 +311,7 @@ async function loadRanking() {
         supabase.from('group_predictions').select('*'),
         supabase.from('group_results').select('*'),
         supabase.from('champion_predictions').select('*'),
-        supabase.from('apuestas').select('*'),
+        supabase.from('pronostics').select('*'),
         supabase.from('participants').select('username, display_name'),
       ]);
 
@@ -446,7 +446,7 @@ async function loadBetForm() {
 
   let betKeys = new Set();
   if (supabase && currentUser) {
-    const { data } = await supabase.from('apuestas').select('match_key').eq('username', currentUser.username);
+    const { data } = await supabase.from('pronostics').select('match_key').eq('username', currentUser.username);
     betKeys = new Set((data ?? []).map(b => b.match_key));
   }
 
@@ -454,31 +454,53 @@ async function loadBetForm() {
     (m.status === 'SCHEDULED' || m.status === 'TIMED'));
   const done = knockoutMatches.filter(m => betKeys.has(String(m.id)));
 
-  // Partits amb placeholders (contendents per definir) — NO editables
+  // Partits amb placeholders — NO editables
   const placeholder = pending.filter(m => isPlaceholderName(m.homeTeam.name) || isPlaceholderName(m.awayTeam.name));
   const editable = pending.filter(m => !isPlaceholderName(m.homeTeam.name) && !isPlaceholderName(m.awayTeam.name));
 
+  // Funció per comprovar si un partit encara es pot modificar (2h abans)
+  function canEdit(match) {
+    if (match.status === 'FINISHED' || match.status === 'IN_PLAY' || match.status === 'PAUSED') return false;
+    if (!match.utcDate) return false;
+    return new Date(match.utcDate).getTime() - Date.now() > 2 * 60 * 60 * 1000;
+  }
+
   let html = '';
 
+  // 1. Pronòstics pendents (sense enviar)
+  if (editable.length > 0) {
+    html += '<h3 class="section-h">Pronòstics pendents</h3>';
+    html += editable.map(m => betFormCard(m)).join('');
+  } else if (pending.length > 0) {
+    html += '<p class="ok-msg">✅ Tots els pronòstics fets!</p>';
+  }
+
+  // 2. Pronòstics enviats (editable si >2h, sinó bloquejat)
+  if (done.length > 0) {
+    const editableBets = done.filter(m => canEdit(m));
+    const lockedBets = done.filter(m => !canEdit(m));
+    if (editableBets.length > 0) {
+      html += '<h3 class="section-h">Pronòstics per revisar</h3>';
+      html += editableBets.map(m => {
+        const timeLeft = Math.floor((new Date(m.utcDate).getTime() - Date.now()) / 1000 / 60);
+        const msg = `⏳ Pots modificar-lo fins ${timeLeft > 60 ? Math.floor(timeLeft/60) + 'h' : timeLeft + 'min'} abans del partit`;
+        return betFormCard(m) + `<p class="muted edit-hint">${msg}</p>`;
+      }).join('');
+    }
+    if (lockedBets.length > 0) {
+      html += `<details class="done-bets"><summary>Pronòstics tancats (${lockedBets.length})</summary>`;
+      html += lockedBets.map(m => `<div class="done-bet-row">
+        <span>${teamWithFlag(m.homeTeam.name)} vs ${teamWithFlag(m.awayTeam.name)}</span>
+        <span class="muted">🔒 tancat</span>
+      </div>`).join('');
+      html += '</details>';
+    }
+  }
+
+  // 3. Emparellaments per definir
   if (placeholder.length > 0) {
     html += '<h3 class="section-h">Emparellaments per definir</h3>';
     html += placeholder.map(m => betPlaceholderCard(m)).join('');
-  }
-
-  if (editable.length > 0) {
-    html += '<h3 class="section-h">Apostes pendents</h3>';
-    html += editable.map(m => betFormCard(m)).join('');
-  } else if (pending.length > 0) {
-    html += '<p class="ok-msg">✅ Totes les apostes fetes!</p>';
-  }
-
-  if (done.length > 0) {
-    html += `<details class="done-bets"><summary>Apostes ja enviades (${done.length})</summary>`;
-    html += done.map(m => `<div class="done-bet-row">
-      <span>${teamWithFlag(m.homeTeam.name)} vs ${teamWithFlag(m.awayTeam.name)}</span>
-      <span class="muted">✓ enviada</span>
-    </div>`).join('');
-    html += '</details>';
   }
 
   container.innerHTML = html;
@@ -602,7 +624,7 @@ async function saveBet(form) {
     };
 
     if (supabase) {
-      const { error } = await supabase.from('apuestas').upsert(bet, { onConflict: 'username,match_key' });
+      const { error } = await supabase.from('pronostics').upsert(bet, { onConflict: 'username,match_key' });
       if (error) throw error;
     }
 
@@ -665,26 +687,43 @@ async function loadGroupStandingsWithPredictions(standings) {
     const partRes = await supabase.from('group_predictions').select('*').eq('username', currentUser.username);
     const predictions = partRes.data ?? [];
 
+    // Saber quins grups estan tancats (tots els equips han jugat 3 partits)
+    const closedGroups = new Set();
+    if (wc) {
+      for (const s of standings) {
+        if (s.type !== 'TOTAL') continue;
+        const table = s.table ?? [];
+        // Un grup està tancat si tots els seus equips tenen playedGames == 3
+        // i cap partit d'aquest grup està pendent o en joc
+        const allPlayed3 = table.every(t => t.playedGames === 3);
+        if (!allPlayed3) continue;
+        const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
+        closedGroups.add(groupKey);
+      }
+    }
+
     // Build predictions lookup per grup i equip
-    // Predictions ve de Supabase amb group_name='A'..'L', pred_1st, pred_2nd, pred_3rd
     const predLookup = {};
     for (const pred of predictions) {
-      const g = pred.group_name; // 'A', 'B', etc.
+      const g = pred.group_name;
+      const closed = closedGroups.has(g);
       predLookup[g] = {};
       const pMap = { 1: pred.pred_1st, 2: pred.pred_2nd, 3: pred.pred_3rd };
       for (const [pos, team] of Object.entries(pMap)) {
         if (team) {
-          predLookup[g][team] = { predicted: Number(pos), points: 0 };
+          predLookup[g][team] = { predicted: Number(pos), points: 0, closed };
         }
       }
     }
 
-    // Calcular punts per equip dins cada grup a partir dels standings reals
+    // Calcular punts per equip només per grups tancats
     for (const group of standings) {
       if (group.type !== 'TOTAL') continue;
       const groupKey = (group.group ?? '').replace(/^(Group |Grup )/i, '');
       const groupPreds = predLookup[groupKey];
       if (!groupPreds) continue;
+      const closed = closedGroups.has(groupKey);
+      if (!closed) continue;
 
       const table = group.table ?? [];
       const actualTop3 = table
