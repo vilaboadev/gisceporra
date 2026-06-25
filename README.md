@@ -48,7 +48,7 @@ Per cada grup (A–L), vas predir quins equips quedarien 1r, 2n i 3r.
 | Encert | Punts |
 |---|---|
 | Equip al top 3 (posició incorrecta) | 5 pts |
-| Equip al top 3 **en la posició exacta** | 5 + 10 = **15 pts** |
+| Equip al top 3 **en la posició exacta** | 5 + 5 = **10 pts** |
 
 ### Fase eliminatòria
 
