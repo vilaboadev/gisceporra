@@ -30,8 +30,8 @@ const FLAG_MAP = {
   'Netherlands':            '🇳🇱',
   'Holland':                '🇳🇱',
   // Grup L
-  'England':                '🏴󠁧󠁢󠁥󠁮󠁧󁿢',
-  'Anglaterra':             '🏴󠁧󠁢󠁥󠁮󠁧󁿢',
+  'England':                '🇬🇧',
+  'Anglaterra':             '🇬🇧',
 
   // Resta d'equips (ordre alfabètic)
   'Albania':                '🇦🇱',
@@ -99,8 +99,8 @@ const FLAG_MAP = {
   'Romania':                '🇷🇴',
   'Saudi Arabia':           '🇸🇦',
   'Aràbia Saudita':         '🇸🇦',
-  'Scotland':               '🏴󠁧󠁢󠁳󠁣󠁴󁿢',
-  'Escòcia':                '🏴󠁧󠁢󠁳󠁣󠁴󁿢',
+  'Scotland':               '🇬🇧',
+  'Escòcia':                '🇬🇧',
   'Senegal':                '🇸🇳',
   'Serbia':                 '🇷🇸',
   'Serbia i Montenegro':    '🇷🇸',
@@ -120,8 +120,8 @@ const FLAG_MAP = {
   'Ukraine':                '🇺🇦',
   'Uzbekistan':             '🇺🇿',
   'Venezuela':              '🇻🇪',
-  'Wales':                  '🏴󠁧󠁢󠁷󠁬󠁳󁿢',
-  'Gal·les':                '🏴󠁧󠁢󠁷󠁬󠁳󁿢',
+  'Wales':                  '🇬🇧',
+  'Gal·les':                '🇬🇧',
 };
 
 /**
