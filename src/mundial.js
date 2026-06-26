@@ -1,5 +1,5 @@
 import { formatPlaceholder, teamWithFlag } from './flags.js';
-import { calculateGroupPointsDetailed } from './scoring.js';
+import { calculateUserTotal } from './scoring.js';
 
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings';
@@ -148,8 +148,7 @@ export function matchCardHtml(match) {
 export function standingsGroupHtml(group, predictions = {}) {
   const sortedTable = [...(group.table ?? [])].sort((a, b) => (a.position || 99) - (b.position || 99));
   const rows = sortedTable
-    .map(
-      (row, i) => {
+    .map((row, i) => {
         const teamName = row.team?.name ?? '';
         const pred = predictions[teamName];
 
@@ -177,8 +176,7 @@ export function standingsGroupHtml(group, predictions = {}) {
       <td>${row.goalDifference > 0 ? '+' : ''}${row.goalDifference}</td>
       <td class="standings-pts">${row.points}</td>
     </tr>`;
-      },
-    )
+      })
     .join('');
 
   return `<div class="standings-group">
@@ -304,7 +302,6 @@ export function knockoutBracketHtml(matches) {
   return html;
 }
 
-
 function espnEventToMatch(event) {
   const comp = event.competitions?.[0] ?? {};
   const competitors = comp.competitors ?? [];
@@ -362,18 +359,135 @@ export async function fetchWCData() {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`ESPN standings ${r.status}`)))),
   ]);
 
-  const matches = eventsResult.status === 'fulfilled'
-    ? (eventsResult.value.events ?? []).map(espnEventToMatch)
-    : [];
-  const standings = standingsResult.status === 'fulfilled'
-    ? (standingsResult.value.children ?? []).map(espnGroupToStanding)
-    : [];
+  const matches = eventsResult.status === 'fulfilled' ? (eventsResult.value.events ?? []).map(espnEventToMatch) : [];
+  const standings = standingsResult.status === 'fulfilled' ? (standingsResult.value.children ?? []).map(espnGroupToStanding) : [];
   const errors = [
     eventsResult.status === 'rejected' ? eventsResult.reason : null,
     standingsResult.status === 'rejected' ? standingsResult.reason : null,
   ].filter(Boolean);
 
   return { matches, standings, errors };
+}
+
+/**
+ * 🔐 EXECUCIÓ DE L'ACTUALITZACIÓ RECALCULADA PER L'ADMINISTRADOR
+ */
+export async function adminUpdateSystem() {
+  const password = prompt("Introdueix la contrasenya d'administrador:");
+  if (password !== "gisceporra2026") { 
+    alert("Contrasenya incorrecta");
+    return;
+  }
+
+  // Utilitza de manera resilient l'objecte client exposat per la teva app (habitualment window.supabase)
+  const dbClient = window.supabase;
+  if (!dbClient) {
+    alert("Error intern: No s'ha trobat l'objecte global de Supabase.");
+    return;
+  }
+
+  console.log("Iniciant sincronització i càlcul de taules...");
+  
+  try {
+    const { matches, standings, errors } = await fetchWCData();
+    if (errors.length > 0) console.warn("Errors detectats en ESPN:", errors);
+
+    const groupsTOTAL = standings.filter((s) => s.type === 'TOTAL');
+
+    // ==========================================
+    // PARTE A: ACTUALITZAR LA TAULA group_results
+    // ==========================================
+    const groupRowsToUpsert = groupsTOTAL.map((g) => {
+      const groupName = g.group.replace(/^(Group|Grup)\s+/i, '');
+      const sortedTable = [...g.table].sort((a, b) => a.position - b.position);
+      
+      return {
+        group_name: groupName,
+        actual_1st: sortedTable[0]?.team?.name || null,
+        actual_2nd: sortedTable[1]?.team?.name || null,
+        actual_3rd: sortedTable[2]?.team?.name || null,
+        actual_4th: sortedTable[3]?.team?.name || null,
+        updated_at: new Date().toISOString()
+      };
+    });
+
+    if (groupRowsToUpsert.length > 0) {
+      const { error: errGroup } = await dbClient
+        .from('group_results')
+        .upsert(groupRowsToUpsert, { onConflict: 'group_name' });
+        
+      if (errGroup) throw new Error("Error a group_results: " + errGroup.message);
+    }
+
+    // ==========================================
+    // PARTE B: RECALCULAR I ACTUALITZAR clasificacion
+    // ==========================================
+    const { data: participants, error: errPart } = await dbClient.from('participants').select('username');
+    if (errPart) throw errPart;
+    
+    const { data: allPredictions, error: errPred } = await dbClient.from('group_predictions').select('*');
+    if (errPred) throw errPred;
+
+    const allBets = []; 
+    let actualChampion = null;
+
+    // Busquem si la final del mundial ha finalitzat per treure el campió real
+    const finalMatch = matches.find(m => m.stage === 'FINAL' && m.status === 'FINISHED');
+    if (finalMatch) {
+      const hGoals = finalMatch.score?.fullTime?.home;
+      const aGoals = finalMatch.score?.fullTime?.away;
+      actualChampion = hGoals > aGoals ? finalMatch.homeTeam?.name : finalMatch.awayTeam?.name;
+    }
+
+    const actualDataFormatted = {
+      groups: groupsTOTAL.map(g => ({
+        groupName: g.group.replace(/^(Group|Grup)\s+/i, ''),
+        top3: [...g.table].sort((a, b) => a.position - b.position).slice(0, 3).map(t => t.team?.name)
+      })),
+      matches: matches,
+      champion: actualChampion
+    };
+
+    const clasificacionRows = [];
+
+    for (const p of participants) {
+      const userGroupPreds = (allPredictions || [])
+        .filter(x => x.username === p.username)
+        .map(x => ({
+          groupName: x.group_name,
+          top3: [x.pred_1st, x.pred_2nd, x.pred_3rd]
+        }));
+
+      const userPredictionsFormatted = {
+        groupPredictions: userGroupPreds,
+        bets: allBets, 
+        champion: null  
+      };
+
+      const totalPoints = calculateUserTotal(userPredictionsFormatted, actualDataFormatted);
+
+      clasificacionRows.push({
+        username: p.username,
+        puntos: totalPoints,
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    if (clasificacionRows.length > 0) {
+      const { error: errClas } = await dbClient
+        .from('clasificacion')
+        .upsert(clasificacionRows, { onConflict: 'username' });
+        
+      if (errClas) throw new Error("Error a clasificacion: " + errClas.message);
+    }
+
+    alert("Puntuacions de la Gisceporra sincronitzades correctament!");
+    window.location.reload();
+
+  } catch (error) {
+    console.error(error);
+    alert("Error fatal a l'actualitzar la BDD: " + error.message);
+  }
 }
 
 export function initMundial() {
@@ -411,6 +525,10 @@ export function initMundial() {
   }
 
   section.querySelector('#refresh-mundial')?.addEventListener('click', loadData);
+  
+  // 🔄 Afegim el lligam dinàmic per al botó secret que col·locarem a sota
+  document.getElementById('admin-sync-btn')?.addEventListener('click', adminUpdateSystem);
+
   loadData();
   setInterval(loadData, 2 * 60 * 1000);
 }
