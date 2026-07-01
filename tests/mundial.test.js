@@ -13,6 +13,7 @@ import {
   matchesSectionHtml,
   knockoutBracketHtml,
   fetchWCData,
+  adminUpdateSystem,
 } from '../src/mundial.js';
 
 // ---------------------------------------------------------------------------
@@ -430,6 +431,156 @@ test('fetchWCData retorna arrays buits si tots els endpoints fallen', async () =
   assert.equal(result.errors.length, 2);
 
   delete globalThis.fetch;
+});
+
+test('adminUpdateSystem bloqueja usuaris no admin sense recàlcul', async () => {
+  let alertMsg = '';
+  const originalAlert = globalThis.alert;
+  globalThis.alert = (msg) => { alertMsg = msg; };
+
+  let fetchCalled = false;
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'AAA', tipus: 'normal' },
+    dbClient: {},
+    fetchData: async () => {
+      fetchCalled = true;
+      return { matches: [], standings: [], errors: [] };
+    },
+  });
+
+  assert.equal(result, false);
+  assert.equal(fetchCalled, false);
+  assert.ok(alertMsg.includes('Només els administradors'));
+
+  globalThis.alert = originalAlert;
+});
+
+test('adminUpdateSystem falla si falta el client de Supabase', async () => {
+  let alertMsg = '';
+  const originalAlert = globalThis.alert;
+  globalThis.alert = (msg) => { alertMsg = msg; };
+
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'ADM', tipus: 'admin' },
+    dbClient: null,
+  });
+
+  assert.equal(result, false);
+  assert.ok(alertMsg.includes("No s'ha trobat l'objecte de Supabase"));
+
+  globalThis.alert = originalAlert;
+});
+
+test('adminUpdateSystem usa fetchData injectat i completa el recàlcul', async () => {
+  const originalAlert = globalThis.alert;
+  globalThis.alert = () => {};
+
+  let fetchCalled = false;
+  const upserts = [];
+  const dbClient = {
+    from(table) {
+      return {
+        async upsert(rows) {
+          upserts.push({ table, rows });
+          return { error: null };
+        },
+        async select() {
+          if (table === 'participants') return { data: [{ username: 'ADM' }], error: null };
+          if (table === 'group_predictions') return { data: [], error: null };
+          return { data: [], error: null };
+        },
+      };
+    },
+  };
+
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'ADM', tipus: 'admin' },
+    dbClient,
+    fetchData: async () => {
+      fetchCalled = true;
+      return {
+        matches: [],
+        standings: [{
+          type: 'TOTAL',
+          group: 'Group A',
+          table: [
+            { position: 1, team: { name: 'Spain' } },
+            { position: 2, team: { name: 'Brazil' } },
+            { position: 3, team: { name: 'Germany' } },
+            { position: 4, team: { name: 'Japan' } },
+          ],
+        }],
+        errors: [],
+      };
+    },
+  });
+
+  assert.equal(result, true);
+  assert.equal(fetchCalled, true);
+  assert.ok(upserts.some((x) => x.table === 'group_results'));
+  assert.ok(upserts.some((x) => x.table === 'clasificacion'));
+
+  globalThis.alert = originalAlert;
+});
+
+test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () => {
+  const originalAlert = globalThis.alert;
+  globalThis.alert = () => {};
+
+  let clasificacionRows = [];
+  const dbClient = {
+    from(table) {
+      return {
+        async upsert(rows) {
+          if (table === 'clasificacion') clasificacionRows = rows;
+          return { error: null };
+        },
+        async select() {
+          if (table === 'participants') return { data: [{ username: 'ADM' }], error: null };
+          if (table === 'group_predictions') return { data: [], error: null };
+          if (table === 'pronostics') {
+            return {
+              data: [{
+                username: 'ADM',
+                match_key: '77',
+                pred_home_goals: 2,
+                pred_away_goals: 1,
+                tie_winner: null,
+                round: 'semifinals',
+              }],
+              error: null,
+            };
+          }
+          if (table === 'champion_predictions') return { data: [], error: null };
+          return { data: [], error: null };
+        },
+      };
+    },
+  };
+
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'ADM', tipus: 'admin' },
+    dbClient,
+    fetchData: async () => ({
+      matches: [{
+        id: '77',
+        status: 'FINISHED',
+        stage: 'SEMI_FINALS',
+        winner: 'Spain',
+        homeTeam: { name: 'Spain' },
+        awayTeam: { name: 'Brazil' },
+        score: { fullTime: { home: 2, away: 1 } },
+      }],
+      standings: [],
+      errors: [],
+    }),
+  });
+
+  assert.equal(result, true);
+  // semifinals: winner (20) + exact score (40) = 60
+  assert.equal(clasificacionRows[0]?.puntos, 60);
+
+  globalThis.alert = originalAlert;
 });
 
 // ---------------------------------------------------------------------------

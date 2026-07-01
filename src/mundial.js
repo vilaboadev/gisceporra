@@ -47,6 +47,13 @@ export const STATUS_LABELS = {
 };
 
 const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+const STAGE_TO_SCORING_ROUND = {
+  ROUND_OF_32: 'setzens',
+  ROUND_OF_16: 'vuitens',
+  QUARTER_FINALS: 'quarts',
+  SEMI_FINALS: 'semifinals',
+  FINAL: 'final',
+};
 
 /**
  * Comprova si un nom d'equip és un placeholder d'ESPN (ex: "Group A Winner").
@@ -372,24 +379,21 @@ export async function fetchWCData() {
 /**
  * 🔐 EXECUCIÓ DE L'ACTUALITZACIÓ RECALCULADA PER L'ADMINISTRADOR
  */
-export async function adminUpdateSystem() {
-  const password = prompt("Introdueix la contrasenya d'administrador:");
-  if (password !== "gisceporra2026") { 
-    alert("Contrasenya incorrecta");
-    return;
+export async function adminUpdateSystem({ currentUser = null, dbClient = null, fetchData = fetchWCData } = {}) {
+  if (currentUser?.tipus !== 'admin') {
+    alert('Només els administradors poden forçar el recàlcul.');
+    return false;
   }
 
-  // Utilitza de manera resilient l'objecte client exposat per la teva app (habitualment window.supabase)
-  const dbClient = window.supabase;
   if (!dbClient) {
-    alert("Error intern: No s'ha trobat l'objecte global de Supabase.");
-    return;
+    alert("Error intern: No s'ha trobat l'objecte de Supabase.");
+    return false;
   }
 
   console.log("Iniciant sincronització i càlcul de taules...");
   
   try {
-    const { matches, standings, errors } = await fetchWCData();
+    const { matches, standings, errors } = await fetchData();
     if (errors.length > 0) console.warn("Errors detectats en ESPN:", errors);
 
     const groupsTOTAL = standings.filter((s) => s.type === 'TOTAL');
@@ -428,7 +432,12 @@ export async function adminUpdateSystem() {
     const { data: allPredictions, error: errPred } = await dbClient.from('group_predictions').select('*');
     if (errPred) throw errPred;
 
-    const allBets = []; 
+    const { data: allBets, error: errBets } = await dbClient.from('pronostics').select('*');
+    if (errBets) throw errBets;
+
+    const { data: allChampionPreds, error: errChamp } = await dbClient.from('champion_predictions').select('*');
+    if (errChamp) throw errChamp;
+
     let actualChampion = null;
 
     // Busquem si la final del mundial ha finalitzat per treure el campió real
@@ -444,7 +453,17 @@ export async function adminUpdateSystem() {
         groupName: g.group.replace(/^(Group|Grup)\s+/i, ''),
         top3: [...g.table].sort((a, b) => a.position - b.position).slice(0, 3).map(t => t.team?.name)
       })),
-      matches: matches,
+      matches: (matches || [])
+        .filter(m => m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE')
+        .map(m => ({
+          id: String(m.id),
+          round: STAGE_TO_SCORING_ROUND[m.stage] || m.round || null,
+          winner: m.winner,
+          homeGoals: m.score?.fullTime?.home,
+          awayGoals: m.score?.fullTime?.away,
+          homeTeam: m.homeTeam?.name || m.homeTeam,
+          awayTeam: m.awayTeam?.name || m.awayTeam,
+        })),
       champion: actualChampion
     };
 
@@ -460,8 +479,16 @@ export async function adminUpdateSystem() {
 
       const userPredictionsFormatted = {
         groupPredictions: userGroupPreds,
-        bets: allBets, 
-        champion: null  
+        bets: (allBets || [])
+          .filter(x => x.username === p.username)
+          .map(x => ({
+            matchId: String(x.match_key),
+            round: x.round,
+            homeGoals: x.pred_home_goals,
+            awayGoals: x.pred_away_goals,
+            tieWinner: x.tie_winner
+          })),
+        champion: (allChampionPreds || []).find(x => x.username === p.username)?.champion || null
       };
 
       const totalPoints = calculateUserTotal(userPredictionsFormatted, actualDataFormatted);
@@ -482,11 +509,15 @@ export async function adminUpdateSystem() {
     }
 
     alert("Puntuacions de la Gisceporra sincronitzades correctament!");
-    window.location.reload();
+    if (typeof window !== 'undefined' && window.location?.reload) {
+      window.location.reload();
+    }
+    return true;
 
   } catch (error) {
     console.error(error);
     alert("Error fatal a l'actualitzar la BDD: " + error.message);
+    return false;
   }
 }
 
@@ -525,9 +556,6 @@ export function initMundial() {
   }
 
   section.querySelector('#refresh-mundial')?.addEventListener('click', loadData);
-  
-  // 🔄 Afegim el lligam dinàmic per al botó secret que col·locarem a sota
-  document.getElementById('admin-sync-btn')?.addEventListener('click', adminUpdateSystem);
 
   loadData();
   setInterval(loadData, 2 * 60 * 1000);

@@ -7,6 +7,7 @@ import {
   knockoutBracketHtml,
   formatMatchDateTime,
   isPlaceholderName,
+  adminUpdateSystem,
 } from './mundial.js';
 import { teamWithFlag, getFlag } from './flags.js';
 
@@ -36,14 +37,14 @@ async function login(username, password) {
   // Usuari test hardcoded — sempre accessible independentment de Supabase
   const testHash = await hashPwd('TST');
   if (raw.toLowerCase() === 'TST' && hash === testHash) {
-    return { username: 'TST', display_name: 'Test User' };
+    return { username: 'TST', display_name: 'Test User', tipus: 'normal' };
   }
 
   if (supabase) {
     // Prova uppercase (format inicials: MVF, AOG…) i lowercase com a fallback
     const { data, error } = await supabase
       .from('participants')
-      .select('username, display_name')
+      .select('username, display_name, tipus')
       .eq('username', uname)
       .eq('password_hash', hash)
       .maybeSingle();
@@ -102,6 +103,8 @@ function showApp(user) {
   show('app');
   $('user-avatar').textContent = user.username.slice(0, 2);
   $('user-label').textContent = user.display_name || user.username;
+  const isAdmin = user?.tipus === 'admin';
+  $('admin-recalc-btn')?.classList.toggle('hidden', !isAdmin);
   navigate('principal');
 }
 
@@ -128,6 +131,16 @@ $('logout-btn').addEventListener('click', () => {
 });
 
 $('info-btn').addEventListener('click', toggleInfo);
+const adminRecalcBtn = $('admin-recalc-btn');
+adminRecalcBtn?.addEventListener('click', async () => {
+  if (!adminRecalcBtn || !currentUser || currentUser.tipus !== 'admin') return;
+  adminRecalcBtn.disabled = true;
+  try {
+    await adminUpdateSystem({ currentUser, dbClient: supabase });
+  } finally {
+    adminRecalcBtn.disabled = false;
+  }
+});
 
 function toggleInfo() {
   const infoEl = $('home-info');
