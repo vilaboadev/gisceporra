@@ -3,11 +3,17 @@ const KNOCKOUT_POINTS = {
   octavos: { winner: 10, exact: 20 },
   setzens: { winner: 10, exact: 20 },
   vuitens: { winner: 10, exact: 20 },
+  ROUND_OF_32: { winner: 10, exact: 20 },
+  ROUND_OF_16: { winner: 10, exact: 20 },
   quarter_finals: { winner: 15, exact: 30 },
   quarts: { winner: 15, exact: 30 },
+  QUARTER_FINALS: { winner: 15, exact: 30 },
   semi_finals: { winner: 20, exact: 40 },
   semifinals: { winner: 20, exact: 40 },
+  SEMI_FINALS: { winner: 20, exact: 40 },
+  THIRD_PLACE: { winner: 20, exact: 40 },
   final: { winner: 30, exact: 50 },
+  FINAL: { winner: 30, exact: 50 },
 };
 
 export function calculateGroupPoints(predictedTop3 = [], actualTop3 = []) {

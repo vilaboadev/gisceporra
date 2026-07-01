@@ -309,7 +309,6 @@ body {
 .podium-name { font-size: .75rem; font-weight: 600; text-align: center; margin: .2rem 0; }
 .podium-pts { font-size: .8rem; color: var(--text2); }
 
-.ranking-list { list-style: none; margin-top: .5rem; }
 .ranking-item {
   display: flex; align-items: center; gap: .75rem;
   padding: .6rem .5rem;
@@ -549,9 +548,101 @@ body {
 .info-card .pred-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 2px; }
 
 /* ─── Player pronos detail ────────────────────────── */
+.ranking-list { list-style: none; margin-top: .5rem; }
+.ranking-item-wrap { list-style: none; }
 .ranking-item { cursor: pointer; }
-.rank-arrow { font-size: .8rem; }
-#pronos-detail { margin-top: .5rem; }
+.rank-arrow {
+  font-size: 1rem;
+  transition: transform .2s;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.ranking-item.open .rank-arrow { transform: rotate(90deg); }
+
+.player-detail-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: .75rem;
+  margin-bottom: .25rem;
+}
+
+/* Phase sections (collapsible) */
+.phase-section { margin-bottom: .5rem; }
+.phase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: .4rem .6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: .4rem;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text2);
+  user-select: none;
+}
+.phase-header:hover { background: var(--bg); }
+.phase-toggle { font-size: .7rem; }
+.phase-content { padding-top: .2rem; }
+
+/* KO bet result cards */
+.ko-bet-card { padding: .6rem .75rem; margin-bottom: .5rem; }
+.ko-header {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .45rem;
+}
+.ko-round {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent);
+  letter-spacing: .06em;
+  flex: 1;
+}
+.ko-meta { font-size: .7rem; }
+
+.ko-match-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .82rem;
+}
+.ko-team { flex: 1; font-weight: 500; }
+.ko-team.right { text-align: right; }
+
+.ko-scores-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .15rem;
+  flex-shrink: 0;
+}
+.ko-scores-row {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+.ko-row-lbl { font-size: .62rem; width: 2.2rem; text-align: right; flex-shrink: 0; }
+.ko-score-pair {
+  display: flex;
+  align-items: center;
+  gap: .2rem;
+  font-weight: 700;
+  font-size: .88rem;
+  min-width: 3rem;
+  justify-content: center;
+}
+.ko-dash { color: var(--text3); font-size: .8rem; }
+.ko-pen { font-size: .72rem; }
+
+/* Blue highlight for advancing teams/scores */
+.ko-adv { color: var(--accent) !important; font-weight: 700; }
 
 .group-pred-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; margin-bottom: .75rem; }
 .gpc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .4rem; }
@@ -570,6 +661,21 @@ body {
 .bet-detail-row { padding: .5rem .75rem; margin-bottom: .5rem; }
 .bet-detail-teams { font-size: .85rem; margin-bottom: .15rem; }
 .bold { font-weight: 700; }
+
+/* Close panel button */
+.btn-close-panel {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: var(--radius-sm);
+  padding: .4rem;
+  font-size: .8rem;
+  cursor: pointer;
+  margin-top: .5rem;
+  transition: background .1s, color .1s;
+}
+.btn-close-panel:hover { background: var(--surface); color: var(--text); }
 
 /* ─── Home: Today & Next matches ─────────────────── */
 .today-matches { padding: .75rem 1rem; margin-bottom: 1rem; }
