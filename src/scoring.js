@@ -79,6 +79,40 @@ export function calculateKnockoutPoints(prediction, result) {
   return winnerPoints + exactPoints;
 }
 
+export function getKnockoutPointsBadgeColor(prediction, result) {
+  const points = calculateKnockoutPoints(prediction, result);
+  if (points === 0) return 'pts-red';
+
+  const predHome = Number(prediction?.homeGoals);
+  const predAway = Number(prediction?.awayGoals);
+  const actualHome = Number(result?.homeGoals);
+  const actualAway = Number(result?.awayGoals);
+
+  const isExact =
+    Number.isFinite(predHome) &&
+    Number.isFinite(predAway) &&
+    Number.isFinite(actualHome) &&
+    Number.isFinite(actualAway) &&
+    predHome === actualHome &&
+    predAway === actualAway;
+
+  if (!isExact) return 'pts-yellow';
+
+  const predictedWinner =
+    predHome === predAway
+      ? prediction?.tieWinner
+      : predHome > predAway
+      ? result?.homeTeam
+      : result?.awayTeam;
+
+  const winnerHit =
+    Boolean(predictedWinner) &&
+    Boolean(result?.winner) &&
+    predictedWinner === result.winner;
+
+  return winnerHit ? 'pts-green' : 'pts-yellow';
+}
+
 export function calculateCrystalBallPoints(predictedChampion, actualChampion) {
   return predictedChampion && actualChampion && predictedChampion === actualChampion ? 100 : 0;
 }

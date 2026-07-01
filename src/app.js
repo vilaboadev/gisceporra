@@ -1,5 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { calculateGroupPoints, calculateGroupPointsDetailed, calculateKnockoutPoints, calculateCrystalBallPoints } from './scoring.js';
+import {
+  calculateGroupPoints,
+  calculateGroupPointsDetailed,
+  calculateKnockoutPoints,
+  calculateCrystalBallPoints,
+  getKnockoutPointsBadgeColor,
+} from './scoring.js';
 import {
   fetchWCData,
   matchesSectionHtml,
@@ -604,17 +610,20 @@ function buildKoPronosHtml(bets, finishedKO) {
     }
 
     // Points earned
-    const pts = calculateKnockoutPoints(
-      { homeGoals: bet.pred_home_goals, awayGoals: bet.pred_away_goals, tieWinner: bet.tie_winner },
-      {
-        round: bet.round,
-        winner: actualWinner,
-        homeGoals: actualHome,
-        awayGoals: actualAway,
-        homeTeam: bet.home_team,
-        awayTeam: bet.away_team,
-      }
-    );
+    const predictionData = {
+      homeGoals: bet.pred_home_goals,
+      awayGoals: bet.pred_away_goals,
+      tieWinner: bet.tie_winner,
+    };
+    const resultData = {
+      round: bet.round,
+      winner: actualWinner,
+      homeGoals: actualHome,
+      awayGoals: actualAway,
+      homeTeam: bet.home_team,
+      awayTeam: bet.away_team,
+    };
+    const pts = calculateKnockoutPoints(predictionData, resultData);
 
     // Highlighting: which side did we predict to advance
     const predHomeAdv = predWinner === bet.home_team;
@@ -626,10 +635,8 @@ function buildKoPronosHtml(bets, finishedKO) {
     const d = new Date(match.utcDate);
     const dateStr = d.toLocaleDateString('ca', { day: '2-digit', month: 'short' });
 
-    // Points badge color: green if exact score, yellow if winner only, red if 0
-    const isExact = typeof actualHome === 'number' && typeof actualAway === 'number'
-      && Number(bet.pred_home_goals) === actualHome && Number(bet.pred_away_goals) === actualAway;
-    const ptsColor = pts === 0 ? 'pts-red' : (isExact ? 'pts-green' : 'pts-yellow');
+    // Points badge color: green only when exact score + winner are both correct
+    const ptsColor = getKnockoutPointsBadgeColor(predictionData, resultData);
 
     // Draw case in actual: when scores equal, show winner name as pen. indicator
     const actualIsDraw = typeof actualHome === 'number' && typeof actualAway === 'number' && actualHome === actualAway;
