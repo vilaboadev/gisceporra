@@ -11,6 +11,7 @@ import {
   adminUpdateSystem,
 } from './mundial.js';
 import { teamWithFlag, getFlag } from './flags.js';
+import { buildRankingFromCache } from './ranking.js';
 
 // ── Supabase ──────────────────────────────────────────────────────────────
 const cfg = window.__SUPABASE_CONFIG ?? { url: '', anonKey: '' };
@@ -411,92 +412,18 @@ async function loadRanking() {
 
   try {
     let ranking = [];
-    const closedGroups = new Set();
 
     if (supabase) {
-      const [partRes, grpResRes, champPredRes, apostesRes, participRes] = await Promise.all([
-        supabase.from('group_predictions').select('*'),
-        supabase.from('group_results').select('*'),
-        supabase.from('champion_predictions').select('*'),
-        supabase.from('pronostics').select('*'),
+      const [classRes, participRes] = await Promise.all([
+        supabase.from('clasificacion').select('username, puntos'),
         supabase.from('participants').select('username, display_name'),
       ]);
 
-      const allPreds = partRes.data ?? [];
-      const grpResults = grpResRes.data ?? [];
-      const champPreds = champPredRes.data ?? [];
-      const apostes = apostesRes.data ?? [];
-      const participantsList = (participRes.data ?? []).filter(p => p.username !== 'TST' || currentUser?.username === 'TST');
-
-      // Get actual champion from group_results where group_name = 'campió'
-      const campioRow = grpResults.find(r => r.group_name === 'campio');
-      const actualChampion = campioRow?.actual_1st ?? null;
-
-      // Get match results for knockout (from ESPN or partidos)
-      if (!wc) wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
-      const finishedMatches = wc.matches.filter(m => m.status === 'FINISHED' && m.stage !== 'GROUP_STAGE');
-
-      // Build map of actual top3 per closed group from ESPN standings
-      const actualTop3ByGroup = {};
-      const closedGroups = new Set();
-      for (const s of (wc.standings ?? [])) {
-        if (s.type !== 'TOTAL') continue;
-        const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
-        const table = s.table ?? [];
-        const allPlayed3 = table.every(t => t.playedGames === 3);
-        if (allPlayed3 && table.length >= 4) closedGroups.add(groupKey);
-      }
-
-      for (const s of (wc.standings ?? [])) {
-        if (s.type !== 'TOTAL') continue;
-        const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
-        if (!closedGroups.has(groupKey)) continue;
-        actualTop3ByGroup[groupKey] = (s.table ?? [])
-          .filter(t => t.position >= 1 && t.position <= 3)
-          .map(t => t.team?.name)
-          .filter(Boolean);
-      }
-
-      ranking = participantsList.map(p => {
-        let pts = 0;
-
-        // Group stage points (from ESPN standings)
-        const myPreds = allPreds.filter(pr => pr.username === p.username);
-        for (const pred of myPreds) {
-          const actualTop3 = actualTop3ByGroup[pred.group_name];
-          if (!actualTop3 || !actualTop3.length) continue;
-          pts += calculateGroupPoints(
-            [pred.pred_1st, pred.pred_2nd, pred.pred_3rd].filter(Boolean),
-            actualTop3
-          );
-        }
-
-        // Knockout points
-        const myApostes = apostes.filter(a => a.username === p.username);
-        for (const bet of myApostes) {
-          const match = finishedMatches.find(m => String(m.id) === bet.match_key);
-          if (!match) continue;
-          pts += calculateKnockoutPoints(
-            { homeGoals: bet.pred_home_goals, awayGoals: bet.pred_away_goals, tieWinner: bet.tie_winner },
-            {
-              round: bet.round,
-              winner: match.winner,
-              homeGoals: match.score.fullTime.home,
-              awayGoals: match.score.fullTime.away,
-              homeTeam: match.homeTeam.name,
-              awayTeam: match.awayTeam.name,
-            }
-          );
-        }
-
-        // Champion (Bola de Cristal)
-        const myChamp = champPreds.find(c => c.username === p.username);
-        if (myChamp?.champion && actualChampion) {
-          pts += calculateCrystalBallPoints(myChamp.champion, actualChampion);
-        }
-
-        return { username: p.username, displayName: p.display_name, points: pts };
-      }).sort((a, b) => b.points - a.points);
+      ranking = buildRankingFromCache({
+        participants: participRes.data ?? [],
+        classification: classRes.data ?? [],
+        currentUsername: currentUser?.username ?? null,
+      });
 
     } else {
       ranking = [{ username: 'TST', displayName: 'Test User', points: 0 }];
@@ -504,44 +431,8 @@ async function loadRanking() {
 
     el.innerHTML = rankingHtml(ranking, currentUser?.username);
 
-    // Update cache tables in background
-    saveRankingCache(ranking, closedGroups);
-
   } catch (err) {
     el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
-  }
-}
-
-// ── Cache: save ranking and group results to Supabase ────────────────────
-async function saveRankingCache(ranking, closedGroups) {
-  if (!supabase || !wc) return;
-  try {
-    // Save final group standings for closed groups
-    for (const s of (wc.standings ?? [])) {
-      if (s.type !== 'TOTAL') continue;
-      const groupKey = (s.group ?? '').replace(/^(Group |Grup )/i, '');
-      if (!closedGroups.has(groupKey)) continue;
-      const top3 = (s.table ?? []).filter(t => t.position >= 1 && t.position <= 3);
-      const fourth = (s.table ?? []).find(t => t.position === 4);
-
-      await supabase.from('group_results').upsert({
-        group_name: groupKey,
-        actual_1st: top3[0]?.team?.name ?? null,
-        actual_2nd: top3[1]?.team?.name ?? null,
-        actual_3rd: top3[2]?.team?.name ?? null,
-        actual_4th: fourth?.team?.name ?? null,
-      }, { onConflict: 'group_name' });
-    }
-
-    // Save ranking
-    for (const r of ranking) {
-      await supabase.from('clasificacion').upsert({
-        username: r.username,
-        puntos: r.points,
-      }, { onConflict: 'username' });
-    }
-  } catch (e) {
-    // Non-critical: fail silently
   }
 }
 
