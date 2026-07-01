@@ -47,6 +47,13 @@ export const STATUS_LABELS = {
 };
 
 const STAGE_ORDER = ['GROUP_STAGE', 'ROUND_OF_32', 'ROUND_OF_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+const STAGE_TO_SCORING_ROUND = {
+  ROUND_OF_32: 'setzens',
+  ROUND_OF_16: 'vuitens',
+  QUARTER_FINALS: 'quarts',
+  SEMI_FINALS: 'semifinals',
+  FINAL: 'final',
+};
 
 /**
  * Comprova si un nom d'equip és un placeholder d'ESPN (ex: "Group A Winner").
@@ -425,7 +432,12 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
     const { data: allPredictions, error: errPred } = await dbClient.from('group_predictions').select('*');
     if (errPred) throw errPred;
 
-    const allBets = []; 
+    const { data: allBets, error: errBets } = await dbClient.from('pronostics').select('*');
+    if (errBets) throw errBets;
+
+    const { data: allChampionPreds, error: errChamp } = await dbClient.from('champion_predictions').select('*');
+    if (errChamp) throw errChamp;
+
     let actualChampion = null;
 
     // Busquem si la final del mundial ha finalitzat per treure el campió real
@@ -441,7 +453,17 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
         groupName: g.group.replace(/^(Group|Grup)\s+/i, ''),
         top3: [...g.table].sort((a, b) => a.position - b.position).slice(0, 3).map(t => t.team?.name)
       })),
-      matches: matches,
+      matches: (matches || [])
+        .filter(m => m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE')
+        .map(m => ({
+          id: String(m.id),
+          round: m.round || STAGE_TO_SCORING_ROUND[m.stage] || null,
+          winner: m.winner,
+          homeGoals: m.score?.fullTime?.home,
+          awayGoals: m.score?.fullTime?.away,
+          homeTeam: m.homeTeam?.name || m.homeTeam,
+          awayTeam: m.awayTeam?.name || m.awayTeam,
+        })),
       champion: actualChampion
     };
 
@@ -457,8 +479,16 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
 
       const userPredictionsFormatted = {
         groupPredictions: userGroupPreds,
-        bets: allBets, 
-        champion: null  
+        bets: (allBets || [])
+          .filter(x => x.username === p.username)
+          .map(x => ({
+            matchId: String(x.match_key),
+            round: x.round,
+            homeGoals: x.pred_home_goals,
+            awayGoals: x.pred_away_goals,
+            tieWinner: x.tie_winner
+          })),
+        champion: (allChampionPreds || []).find(x => x.username === p.username)?.champion || null
       };
 
       const totalPoints = calculateUserTotal(userPredictionsFormatted, actualDataFormatted);

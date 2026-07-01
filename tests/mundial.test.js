@@ -523,6 +523,65 @@ test('adminUpdateSystem usa fetchData injectat i completa el recàlcul', async (
   globalThis.alert = originalAlert;
 });
 
+test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () => {
+  const originalAlert = globalThis.alert;
+  globalThis.alert = () => {};
+
+  let clasificacionRows = [];
+  const dbClient = {
+    from(table) {
+      return {
+        async upsert(rows) {
+          if (table === 'clasificacion') clasificacionRows = rows;
+          return { error: null };
+        },
+        async select() {
+          if (table === 'participants') return { data: [{ username: 'ADM' }], error: null };
+          if (table === 'group_predictions') return { data: [], error: null };
+          if (table === 'pronostics') {
+            return {
+              data: [{
+                username: 'ADM',
+                match_key: '77',
+                pred_home_goals: 2,
+                pred_away_goals: 1,
+                tie_winner: null,
+                round: 'semifinals',
+              }],
+              error: null,
+            };
+          }
+          if (table === 'champion_predictions') return { data: [], error: null };
+          return { data: [], error: null };
+        },
+      };
+    },
+  };
+
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'ADM', tipus: 'admin' },
+    dbClient,
+    fetchData: async () => ({
+      matches: [{
+        id: '77',
+        status: 'FINISHED',
+        stage: 'SEMI_FINALS',
+        winner: 'Spain',
+        homeTeam: { name: 'Spain' },
+        awayTeam: { name: 'Brazil' },
+        score: { fullTime: { home: 2, away: 1 } },
+      }],
+      standings: [],
+      errors: [],
+    }),
+  });
+
+  assert.equal(result, true);
+  assert.equal(clasificacionRows[0]?.puntos, 60);
+
+  globalThis.alert = originalAlert;
+});
+
 // ---------------------------------------------------------------------------
 // flags.js — formatPlaceholder i teamWithFlag
 // ---------------------------------------------------------------------------
