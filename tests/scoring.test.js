@@ -89,7 +89,67 @@ test('calculateKnockoutPoints gives winner and exact points for semifinal', () =
     { homeGoals: 2, awayGoals: 1 },
     { round: 'semifinals', winner: 'Local', homeGoals: 2, awayGoals: 1, homeTeam: 'Local', awayTeam: 'Visitante' },
   );
-  assert.equal(points, 60);
+  assert.equal(points, 40);
+});
+
+test('calculateKnockoutPoints gives only exact points when draw result but wrong tie_winner', () => {
+  // MVF case: predicted 1-1 Netherlands, actual 1-1 Morocco advances
+  const points = calculateKnockoutPoints(
+    { homeGoals: 1, awayGoals: 1, tieWinner: 'Netherlands' },
+    { round: 'setzens', winner: 'Morocco', homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(points, 10);
+});
+
+test('calculateKnockoutPoints gives winner + exact points when draw result and correct tie_winner', () => {
+  const points = calculateKnockoutPoints(
+    { homeGoals: 1, awayGoals: 1, tieWinner: 'Morocco' },
+    { round: 'setzens', winner: 'Morocco', homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(points, 20);
+});
+
+test('calculateKnockoutPoints gives exact points only when both winner and tie_winner are null but score matches', () => {
+  const points = calculateKnockoutPoints(
+    { homeGoals: 1, awayGoals: 1, tieWinner: null },
+    { round: 'setzens', winner: null, homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(points, 10);
+});
+
+test('calculateKnockoutPoints gives 0 when both winner and tie_winner are null and score does not match', () => {
+  const points = calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1, tieWinner: null },
+    { round: 'setzens', winner: null, homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(points, 0);
+});
+
+test('calculateKnockoutPoints gives only winner points when correct winner but wrong score', () => {
+  const points = calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 0 },
+    { round: 'quarts', winner: 'Local', homeGoals: 1, awayGoals: 0, homeTeam: 'Local', awayTeam: 'Visitante' },
+  );
+  assert.equal(points, 15);
+});
+
+test('calculateKnockoutPoints max points per round', () => {
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1 },
+    { round: 'setzens', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
+  ), 20);
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1 },
+    { round: 'quarts', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
+  ), 30);
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1 },
+    { round: 'semifinals', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
+  ), 40);
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1 },
+    { round: 'final', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
+  ), 50);
 });
 
 test('calculateCrystalBallPoints adds bonus', () => {
