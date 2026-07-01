@@ -7,6 +7,7 @@ import {
   knockoutBracketHtml,
   formatMatchDateTime,
   isPlaceholderName,
+  STAGE_LABELS,
   adminUpdateSystem,
 } from './mundial.js';
 import { teamWithFlag, getFlag } from './flags.js';
@@ -401,34 +402,6 @@ function setupPorraTabs() {
 function loadPorraTab(tab) {
   if (tab === 'classificacio') loadRanking();
   else if (tab === 'pronostics') loadBetForm();
-  else if (tab === 'jugadors') loadPlayersTab();
-}
-
-async function loadPlayersTab() {
-  const list = $('players-list');
-  if (!list || !supabase) return;
-
-  try {
-    const { data: participants } = await supabase
-      .from('participants')
-      .select('username, display_name')
-      .neq('username', 'TST')
-      .order('username');
-    if (!participants?.length) {
-      list.innerHTML = '<p class="muted">No hi ha jugadors.</p>';
-      return;
-    }
-
-    list.innerHTML = '<ul class="players-list">' + participants.map(p =>
-      `<li class="ranking-item" onclick="showPlayerPronos('${p.username}')">
-        <span class="rank-name">${p.display_name || p.username}</span>
-        <span class="muted">${p.username}</span>
-        <span class="rank-arrow muted">→</span>
-      </li>`
-    ).join('') + '</ul>';
-  } catch {
-    list.innerHTML = '<p class="muted">Error carregant jugadors.</p>';
-  }
 }
 
 async function loadRanking() {
@@ -596,11 +569,15 @@ function rankingHtml(ranking, me) {
   html += '<ol class="ranking-list">';
   ranking.forEach((e, i) => {
     const isMe = e.username === me;
-    html += `<li class="ranking-item ${isMe ? 'is-me' : ''}" data-username="${e.username}" onclick="showPlayerPronos('${e.username}')">
-      <span class="rank-num">${i + 1}</span>
-      <span class="rank-name">${e.displayName || e.username}</span>
-      <span class="rank-pts">${e.points} <span class="pts-label">pts</span></span>
-      ${isMe ? '<span class="rank-you">Tu</span>' : '<span class="rank-arrow muted">→</span>'}
+    const panelId = `pronos-panel-${e.username}`;
+    html += `<li class="ranking-item-wrap">
+      <div class="ranking-item ${isMe ? 'is-me' : ''}" data-username="${e.username}" onclick="togglePlayerPronos('${e.username}')">
+        <span class="rank-num">${i + 1}</span>
+        <span class="rank-name">${e.displayName || e.username}</span>
+        <span class="rank-pts">${e.points} <span class="pts-label">pts</span></span>
+        ${isMe ? '<span class="rank-you">Tu</span>' : ''}<span class="rank-arrow muted">›</span>
+      </div>
+      <div class="player-detail-panel hidden" id="${panelId}"></div>
     </li>`;
   });
   html += '</ol>';
@@ -609,19 +586,45 @@ function rankingHtml(ranking, me) {
 }
 
 // ── Player pronos detail ─────────────────────────────────────────────────
-window.showPlayerPronos = async function(username) {
-  const el = $('pronos-detail');
-  if (!el || !supabase || !wc) return;
+const KO_STAGE_ORDER = ['FINAL', 'THIRD_PLACE', 'SEMI_FINALS', 'QUARTER_FINALS', 'ROUND_OF_16', 'ROUND_OF_32'];
 
-  el.classList.toggle('hidden');
-  if (el.classList.contains('hidden')) return;
+window.togglePlayerPronos = async function(username) {
+  const panel = $(`pronos-panel-${username}`);
+  if (!panel) return;
 
-  el.innerHTML = '<p class="muted">Carregant pronòstics…</p>';
+  const rankingItem = panel.previousElementSibling;
+  const isHidden = panel.classList.contains('hidden');
 
+  if (isHidden) {
+    panel.classList.remove('hidden');
+    rankingItem?.classList.add('open');
+    if (!panel.dataset.loaded) {
+      panel.innerHTML = '<p class="muted" style="padding:.5rem">Carregant pronòstics…</p>';
+      if (!wc) {
+        wc = await fetchWCData().catch(() => ({ matches: [], standings: [], errors: [] }));
+      }
+      await loadPlayerPronosContent(username, panel);
+    }
+  } else {
+    panel.classList.add('hidden');
+    rankingItem?.classList.remove('open');
+  }
+};
+
+window.togglePhase = function(headerEl) {
+  const content = headerEl.nextElementSibling;
+  const toggle = headerEl.querySelector('.phase-toggle');
+  if (!content) return;
+  const isHidden = content.classList.contains('hidden');
+  content.classList.toggle('hidden', !isHidden);
+  if (toggle) toggle.textContent = isHidden ? '▼' : '▶';
+};
+
+async function loadPlayerPronosContent(username, el) {
   try {
     const [partRes, pronosRes] = await Promise.all([
-      supabase.from('group_predictions').select('*').eq('username', username),
-      supabase.from('pronostics').select('*').eq('username', username),
+      supabase ? supabase.from('group_predictions').select('*').eq('username', username) : { data: [] },
+      supabase ? supabase.from('pronostics').select('*').eq('username', username) : { data: [] },
     ]);
 
     const predictions = partRes.data ?? [];
@@ -642,73 +645,182 @@ window.showPlayerPronos = async function(username) {
       m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE'
     );
 
-    let html = `<h3 class="section-h">Pronòstics de ${username}</h3>`;
+    // ── Eliminatòries section (expanded by default) ──────────────────────
+    const koHtml = buildKoPronosHtml(bets, finishedKO);
+    const koContent = koHtml || '<p class="muted">Sense pronòstics d\'eliminatòria tancats.</p>';
 
-    // Group bets (closed only)
-    if (predictions.length && closedGroups.size) {
-      const sorted = predictions.filter(p => closedGroups.has(p.group_name))
-        .sort((a, b) => a.group_name.localeCompare(b.group_name));
-      html += '<h4 class="section-h">Fase de Grups</h4>';
-      for (const pred of sorted) {
-        if (!closedGroups.has(pred.group_name)) continue;
-        const s = wc.standings.find(st => {
-          const k = (st.group ?? '').replace(/^(Group |Grup )/i, '');
-          return st.type === 'TOTAL' && k === pred.group_name;
-        });
-        if (!s) continue;
-        const actualOrder = (s.table ?? [])
-          .sort((a, b) => (a.position || 99) - (b.position || 99))
-          .map(t => t.team?.name)
-          .filter(Boolean);
-        const details = calculateGroupPointsDetailed(actualOrder, pred);
-        const total = details.reduce((sum, d) => sum + d.points, 0);
-        html += `<div class="group-pred-card card">
-          <div class="gpc-header">
-            <span class="gpc-title">Grup ${pred.group_name}</span>
-            <span class="gpc-total">${total} pts</span>
-          </div>
-          <table class="group-pred-table">
-            <thead><tr><th>#</th><th>Equip</th><th>Pron.</th><th>Pts</th></tr></thead>
-            <tbody>
-            ${details.map(d => `
-              <tr class="${d.predicted === d.position ? 'exact-row' : ''}">
-                <td class="gpc-pos">${d.position}</td>
-                <td>${teamWithFlag(d.team)}</td>
-                <td class="gpc-pred">${d.predicted ?? '–'}</td>
-                <td class="gpc-pts">${d.points || '–'}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>`;
-      }
-    }
+    // ── Grups section (collapsed by default) ────────────────────────────
+    const grpsHtml = buildGroupPronosHtml(predictions, closedGroups);
+    const grpsContent = grpsHtml || '<p class="muted">Sense pronòstics de grups tancats.</p>';
 
-    // Knockout bets (finished only)
-    if (bets.length && finishedKO.length) {
-      html += '<h4 class="section-h">Eliminatòria</h4>';
-      for (const bet of bets) {
-        const match = finishedKO.find(m => String(m.id) === bet.match_key);
-        if (!match) continue;
-        const actualHome = match.score?.fullTime?.home ?? '-';
-        const actualAway = match.score?.fullTime?.away ?? '-';
-        html += `<div class="bet-detail-row card">
-          <div class="bet-detail-teams">
-            ${teamWithFlag(bet.home_team)} <span class="bold">${bet.pred_home_goals} – ${bet.pred_away_goals}</span> ${teamWithFlag(bet.away_team)}
-          </div>
-          <div class="muted">Real: ${actualHome} – ${actualAway}</div>
-        </div>`;
-      }
-    }
-
-    if (!html.includes('Grup') && !html.includes('Eliminat')) {
-      html += '<p class="muted">No hi ha pronòstics tancats per mostrar.</p>';
-    }
-
-    el.innerHTML = html;
+    el.innerHTML = `
+      <div class="phase-section">
+        <div class="phase-header" onclick="togglePhase(this)">
+          <span>⚔️ Eliminatòries</span>
+          <span class="phase-toggle">▼</span>
+        </div>
+        <div class="phase-content">${koContent}</div>
+      </div>
+      <div class="phase-section">
+        <div class="phase-header" onclick="togglePhase(this)">
+          <span>📊 Fase de Grups</span>
+          <span class="phase-toggle">▶</span>
+        </div>
+        <div class="phase-content hidden">${grpsContent}</div>
+      </div>
+      <button class="btn-close-panel" onclick="togglePlayerPronos('${username}')">✕ Tancar</button>
+    `;
+    el.dataset.loaded = '1';
   } catch (err) {
-    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+    el.innerHTML = `<p class="muted" style="padding:.5rem">Error: ${err.message}</p>`;
   }
-};
+}
+
+function buildKoPronosHtml(bets, finishedKO) {
+  const matchedBets = bets
+    .map(bet => {
+      const match = finishedKO.find(m => String(m.id) === bet.match_key);
+      return match ? { bet, match } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const si = KO_STAGE_ORDER.indexOf(a.match.stage);
+      const sj = KO_STAGE_ORDER.indexOf(b.match.stage);
+      if (si !== sj) return si - sj; // FINAL first
+      return new Date(b.match.utcDate) - new Date(a.match.utcDate); // newer first
+    });
+
+  if (!matchedBets.length) return '';
+
+  return matchedBets.map(({ bet, match }) => {
+    const actualHome = match.score?.fullTime?.home ?? '-';
+    const actualAway = match.score?.fullTime?.away ?? '-';
+    const actualWinner = match.winner ?? null;
+
+    // Predicted advancing team
+    let predWinner;
+    if (Number(bet.pred_home_goals) > Number(bet.pred_away_goals)) predWinner = bet.home_team;
+    else if (Number(bet.pred_home_goals) < Number(bet.pred_away_goals)) predWinner = bet.away_team;
+    else predWinner = bet.tie_winner;
+
+    // Actual advancing side (home / away / null)
+    let actualWinnerSide = null;
+    if (typeof actualHome === 'number' && typeof actualAway === 'number') {
+      if (actualHome > actualAway) actualWinnerSide = 'home';
+      else if (actualAway > actualHome) actualWinnerSide = 'away';
+      else if (actualWinner === match.homeTeam?.name) actualWinnerSide = 'home';
+      else if (actualWinner === match.awayTeam?.name) actualWinnerSide = 'away';
+    }
+
+    // Points earned
+    const pts = calculateKnockoutPoints(
+      { homeGoals: bet.pred_home_goals, awayGoals: bet.pred_away_goals, tieWinner: bet.tie_winner },
+      {
+        round: bet.round,
+        winner: actualWinner,
+        homeGoals: actualHome,
+        awayGoals: actualAway,
+        homeTeam: bet.home_team,
+        awayTeam: bet.away_team,
+      }
+    );
+
+    // Highlighting: which side did we predict to advance
+    const predHomeAdv = predWinner === bet.home_team;
+    const predAwayAdv = predWinner === bet.away_team;
+    // For draws: only team name highlighted (both goal numbers are equal)
+    const isDraw = Number(bet.pred_home_goals) === Number(bet.pred_away_goals);
+
+    const stageLabel = STAGE_LABELS[match.stage] ?? match.stage?.replace(/_/g, ' ');
+    const d = new Date(match.utcDate);
+    const dateStr = d.toLocaleDateString('ca', { day: '2-digit', month: 'short' });
+
+    // Points badge color: green if exact score, yellow if winner only, red if 0
+    const isExact = typeof actualHome === 'number' && typeof actualAway === 'number'
+      && Number(bet.pred_home_goals) === actualHome && Number(bet.pred_away_goals) === actualAway;
+    const ptsColor = pts === 0 ? 'pts-red' : (isExact ? 'pts-green' : 'pts-yellow');
+
+    // Draw case in actual: when scores equal, show winner name as pen. indicator
+    const actualIsDraw = typeof actualHome === 'number' && typeof actualAway === 'number' && actualHome === actualAway;
+    const penSuffix = actualIsDraw && actualWinner
+      ? ` <span class="ko-adv ko-pen">${teamWithFlag(actualWinner)} (penals)</span>`
+      : '';
+
+    return `<div class="ko-bet-card card">
+      <div class="ko-header">
+        <span class="ko-round">${stageLabel}</span>
+        <span class="ko-meta muted">${dateStr}</span>
+        <span class="pts-badge ${ptsColor}">${pts}</span>
+      </div>
+      <div class="ko-match-row">
+        <span class="ko-team ${predHomeAdv ? 'ko-adv' : ''}">${teamWithFlag(bet.home_team)}</span>
+        <div class="ko-scores-col">
+          <div class="ko-scores-row">
+            <span class="ko-row-lbl muted">Pron.</span>
+            <span class="ko-score-pair">
+              <span class="${!isDraw && predHomeAdv ? 'ko-adv' : ''}">${bet.pred_home_goals}</span>
+              <span class="ko-dash">–</span>
+              <span class="${!isDraw && predAwayAdv ? 'ko-adv' : ''}">${bet.pred_away_goals}</span>
+            </span>
+          </div>
+          <div class="ko-scores-row">
+            <span class="ko-row-lbl muted">Real</span>
+            <span class="ko-score-pair">
+              <span class="${actualWinnerSide === 'home' && !actualIsDraw ? 'ko-adv' : ''}">${actualHome}</span>
+              <span class="ko-dash">–</span>
+              <span class="${actualWinnerSide === 'away' && !actualIsDraw ? 'ko-adv' : ''}">${actualAway}</span>
+            </span>${penSuffix}
+          </div>
+        </div>
+        <span class="ko-team right ${predAwayAdv ? 'ko-adv' : ''}">${teamWithFlag(bet.away_team)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildGroupPronosHtml(predictions, closedGroups) {
+  if (!predictions.length || !closedGroups.size) return '';
+
+  const sorted = predictions
+    .filter(p => closedGroups.has(p.group_name))
+    .sort((a, b) => a.group_name.localeCompare(b.group_name));
+
+  if (!sorted.length) return '';
+
+  return sorted.map(pred => {
+    const s = (wc.standings ?? []).find(st => {
+      const k = (st.group ?? '').replace(/^(Group |Grup )/i, '');
+      return st.type === 'TOTAL' && k === pred.group_name;
+    });
+    if (!s) return '';
+
+    const actualOrder = (s.table ?? [])
+      .sort((a, b) => (a.position || 99) - (b.position || 99))
+      .map(t => t.team?.name)
+      .filter(Boolean);
+    const details = calculateGroupPointsDetailed(actualOrder, pred);
+    const total = details.reduce((sum, d) => sum + d.points, 0);
+
+    return `<div class="group-pred-card card">
+      <div class="gpc-header">
+        <span class="gpc-title">Grup ${pred.group_name}</span>
+        <span class="gpc-total">${total} pts</span>
+      </div>
+      <table class="group-pred-table">
+        <thead><tr><th>#</th><th>Equip</th><th>Pron.</th><th>Pts</th></tr></thead>
+        <tbody>
+        ${details.map(d => `
+          <tr class="${d.predicted === d.position ? 'exact-row' : ''}">
+            <td class="gpc-pos">${d.position}</td>
+            <td>${teamWithFlag(d.team)}</td>
+            <td class="gpc-pred">${d.predicted ?? '–'}</td>
+            <td class="gpc-pts">${d.points || '–'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
 
 // ── Bet Form (Fase Eliminatòria) ──────────────────────────────────────────
 async function loadBetForm() {
