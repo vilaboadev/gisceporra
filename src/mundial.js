@@ -372,24 +372,21 @@ export async function fetchWCData() {
 /**
  * 🔐 EXECUCIÓ DE L'ACTUALITZACIÓ RECALCULADA PER L'ADMINISTRADOR
  */
-export async function adminUpdateSystem() {
-  const password = prompt("Introdueix la contrasenya d'administrador:");
-  if (password !== "gisceporra2026") { 
-    alert("Contrasenya incorrecta");
-    return;
+export async function adminUpdateSystem({ currentUser = null, dbClient = null, fetchData = fetchWCData } = {}) {
+  if (currentUser?.tipus !== 'admin') {
+    alert('Només els administradors poden forçar el recàlcul.');
+    return false;
   }
 
-  // Utilitza de manera resilient l'objecte client exposat per la teva app (habitualment window.supabase)
-  const dbClient = window.supabase;
   if (!dbClient) {
-    alert("Error intern: No s'ha trobat l'objecte global de Supabase.");
-    return;
+    alert("Error intern: No s'ha trobat l'objecte de Supabase.");
+    return false;
   }
 
   console.log("Iniciant sincronització i càlcul de taules...");
   
   try {
-    const { matches, standings, errors } = await fetchWCData();
+    const { matches, standings, errors } = await fetchData();
     if (errors.length > 0) console.warn("Errors detectats en ESPN:", errors);
 
     const groupsTOTAL = standings.filter((s) => s.type === 'TOTAL');
@@ -482,11 +479,15 @@ export async function adminUpdateSystem() {
     }
 
     alert("Puntuacions de la Gisceporra sincronitzades correctament!");
-    window.location.reload();
+    if (typeof window !== 'undefined' && window.location?.reload) {
+      window.location.reload();
+    }
+    return true;
 
   } catch (error) {
     console.error(error);
     alert("Error fatal a l'actualitzar la BDD: " + error.message);
+    return false;
   }
 }
 
@@ -525,9 +526,6 @@ export function initMundial() {
   }
 
   section.querySelector('#refresh-mundial')?.addEventListener('click', loadData);
-  
-  // 🔄 Afegim el lligam dinàmic per al botó secret que col·locarem a sota
-  document.getElementById('admin-sync-btn')?.addEventListener('click', adminUpdateSystem);
 
   loadData();
   setInterval(loadData, 2 * 60 * 1000);
