@@ -18,6 +18,7 @@ import {
 } from './mundial.js';
 import { teamWithFlag, getFlag } from './flags.js';
 import { buildRankingFromCache } from './ranking.js';
+import { buildBetFormCard } from './pronostics.js';
 
 // ── Supabase ──────────────────────────────────────────────────────────────
 const cfg = window.__SUPABASE_CONFIG ?? { url: '', anonKey: '' };
@@ -301,7 +302,7 @@ async function loadHome() {
       } else if (placeholder.length > 0) {
         $('home-alerts').innerHTML = '<p class="ok-msg">⏳ Esperant emparellaments de l\'eliminatòria</p>';
       } else {
-        $('home-alerts').innerHTML = '<p class="ok-msg">✅ Apostes al dia</p>';
+        $('home-alerts').innerHTML = '<p class="ok-msg">✅ Pronòstics al dia</p>';
       }
     } else {
       $('home-alerts').innerHTML = '';
@@ -741,11 +742,12 @@ async function loadBetForm() {
     return;
   }
 
-  let betKeys = new Set();
+  let betsByMatch = new Map();
   if (supabase && currentUser) {
-    const { data } = await supabase.from('pronostics').select('match_key').eq('username', currentUser.username);
-    betKeys = new Set((data ?? []).map(b => b.match_key));
+    const { data } = await supabase.from('pronostics').select('*').eq('username', currentUser.username);
+    betsByMatch = new Map((data ?? []).map(b => [String(b.match_key), b]));
   }
+  const betKeys = new Set(betsByMatch.keys());
 
   const pending = knockoutMatches.filter(m => !betKeys.has(String(m.id)) &&
     (m.status === 'SCHEDULED' || m.status === 'TIMED'));
@@ -778,7 +780,7 @@ async function loadBetForm() {
     const lockedBets = done.filter(m => !canEdit(m));
     if (editableBets.length > 0) {
       html += '<h3 class="section-h">Pronòstics per revisar</h3>';
-      html += editableBets.map(m => betFormCard(m)).join('');
+      html += editableBets.map(m => betFormCard(m, betsByMatch.get(String(m.id)))).join('');
       html += '<p class="muted edit-hint">⏳ Pots modificar-los fins 2h abans del partit</p>';
     }
     if (lockedBets.length > 0) {
@@ -819,6 +821,7 @@ async function loadBetForm() {
 
     homeIn.addEventListener('input', updateTie);
     awayIn.addEventListener('input', updateTie);
+    updateTie();
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
@@ -850,39 +853,8 @@ function betPlaceholderCard(match) {
     </div>`;
 }
 
-function betFormCard(match) {
-  const d = new Date(match.utcDate);
-  const dateStr = d.toLocaleDateString('ca', { weekday: 'short', day: '2-digit', month: 'short' }) +
-    ' · ' + d.toLocaleTimeString('ca', { hour: '2-digit', minute: '2-digit' });
-  return `
-    <form class="bet-form card" data-match-id="${match.id}" data-round="${match.stage}"
-          data-home="${match.homeTeam.name}" data-away="${match.awayTeam.name}">
-      <div class="bet-header">
-        <span class="bet-round">${match.stage?.replace(/_/g,' ') ?? ''}</span>
-        <span class="bet-date muted">${dateStr}</span>
-      </div>
-      <div class="bet-teams">
-        <span class="bet-team-name">${teamWithFlag(match.homeTeam.name)}</span>
-        <div class="bet-score-inputs">
-          <input class="bet-home bet-goal-input" type="number" min="0" max="20" placeholder="0" required />
-          <span class="bet-dash">–</span>
-          <input class="bet-away bet-goal-input" type="number" min="0" max="20" placeholder="0" required />
-        </div>
-        <span class="bet-team-name right">${teamWithFlag(match.awayTeam.name)}</span>
-      </div>
-      <p class="bet-hint muted">Resultat final (incloent pròrroga si n'hi ha)</p>
-      <div class="tie-winner-group hidden">
-        <label>En cas d'empat, qui passa?
-          <select class="tie-winner-select">
-            <option value="">-- Selecciona equip --</option>
-            <option value="${match.homeTeam.name}">${match.homeTeam.name}</option>
-            <option value="${match.awayTeam.name}">${match.awayTeam.name}</option>
-          </select>
-        </label>
-      </div>
-      <button type="submit" class="btn-primary">Enviar aposta</button>
-      <p class="bet-status status-msg"></p>
-    </form>`;
+function betFormCard(match, existingBet = null) {
+  return buildBetFormCard(match, existingBet);
 }
 
 async function saveBet(form) {
@@ -922,19 +894,22 @@ async function saveBet(form) {
       if (error) throw error;
     }
 
-    statusEl.textContent = '✅ Aposta guardada!';
+    statusEl.textContent = '✅ Pronòstic guardat!';
     statusEl.className = 'bet-status status-msg ok';
-    btn.textContent = '✓ Enviada';
+    btn.textContent = '✓ Guardat';
     btn.classList.add('btn-done');
 
     // Refresh home alerts after a short delay
-    setTimeout(() => loadHome(), 1500);
+    setTimeout(() => {
+      loadBetForm();
+      loadHome();
+    }, 1200);
 
   } catch (err) {
     statusEl.textContent = `❌ ${err.message}`;
     statusEl.className = 'bet-status status-msg error';
     btn.disabled = false;
-    btn.textContent = 'Enviar aposta';
+    btn.textContent = form.dataset.hasBet === '1' ? 'Edita pronòstic' : 'Envia pronòstic';
   }
 }
 

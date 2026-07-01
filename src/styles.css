@@ -349,6 +349,31 @@ body {
 .bet-goal-input:focus { border-color: var(--accent); }
 .bet-dash { color: var(--text3); font-weight: 700; }
 .bet-hint { font-size: .75rem; margin-bottom: .6rem; }
+.bet-form-saved {
+  background: linear-gradient(180deg, rgba(59,130,246,.08), rgba(20,25,39,1) 28%);
+}
+.bet-last-saved {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .75rem;
+  padding: .45rem .6rem;
+  background: rgba(59,130,246,.08);
+  border: 1px solid rgba(99,102,241,.35);
+  border-radius: var(--radius-sm);
+}
+.bet-last-saved-label {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.bet-last-saved-score {
+  font-size: .9rem;
+  color: var(--text);
+}
 
 /* Placeholder bet (contendents per definir) */
 .placeholder-bet { opacity: .6; }
@@ -371,6 +396,9 @@ body {
   padding: .55rem .75rem; font-size: .9rem; outline: none;
 }
 .tie-winner-select:focus { border-color: var(--accent); }
+.btn-primary.btn-edit {
+  background: linear-gradient(135deg, #0f766e, #0ea5a4);
+}
 
 .done-bets {
   background: var(--surface);
