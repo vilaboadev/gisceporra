@@ -746,6 +746,11 @@ function buildKoPronosHtml(bets, finishedKO) {
       ? ` <span class="ko-adv ko-pen">${teamWithFlag(actualWinner)} (penals)</span>`
       : '';
 
+    // Draw case in prediction: when predicted scores equal, show predicted tie_winner
+    const predPenSuffix = isDraw && bet.tie_winner
+      ? ` <span class="ko-adv ko-pen">${teamWithFlag(bet.tie_winner)} (penals)</span>`
+      : '';
+
     return `<div class="ko-bet-card card">
       <div class="ko-header">
         <span class="ko-round">${stageLabel}</span>
@@ -761,7 +766,7 @@ function buildKoPronosHtml(bets, finishedKO) {
               <span class="${!isDraw && predHomeAdv ? 'ko-adv' : ''}">${bet.pred_home_goals}</span>
               <span class="ko-dash">–</span>
               <span class="${!isDraw && predAwayAdv ? 'ko-adv' : ''}">${bet.pred_away_goals}</span>
-            </span>
+            </span>${predPenSuffix}
           </div>
           <div class="ko-scores-row">
             <span class="ko-row-lbl muted">Real</span>
