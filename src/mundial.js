@@ -54,6 +54,7 @@ const STAGE_TO_SCORING_ROUND = {
   SEMI_FINALS: 'semifinals',
   FINAL: 'final',
 };
+const KNOCKOUT_RESULTS_TABLE = 'knockout_results';
 
 /**
  * Comprova si un nom d'equip és un placeholder d'ESPN (ex: "Group A Winner").
@@ -110,6 +111,28 @@ export function filterActiveMatches(matches, now = new Date()) {
     }
     return false;
   });
+}
+
+function normalizeGroupName(groupName = '') {
+  return String(groupName).replace(/^(Group|Grup)\s+/i, '');
+}
+
+function isClosedGroupStanding(standing) {
+  const table = standing?.table ?? [];
+  return table.length >= 4 && table.every((team) => Number(team.playedGames) === 3);
+}
+
+function getMatchWinner(match) {
+  if (typeof match?.winner === 'string' && match.winner) return match.winner;
+  if (match?.winner?.name) return match.winner.name;
+
+  const homeGoals = match?.score?.fullTime?.home;
+  const awayGoals = match?.score?.fullTime?.away;
+
+  if (homeGoals == null || awayGoals == null || homeGoals === awayGoals) return null;
+  return homeGoals > awayGoals
+    ? match.homeTeam?.name || match.homeTeam || null
+    : match.awayTeam?.name || match.awayTeam || null;
 }
 
 export function matchCardHtml(match) {
@@ -333,6 +356,7 @@ function espnEventToMatch(event) {
     group,
     matchday: group,
     utcDate: event.date,
+    winner: home.winner ? home.team?.displayName : away.winner ? away.team?.displayName : null,
   };
 }
 
@@ -397,12 +421,18 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
     if (errors.length > 0) console.warn("Errors detectats en ESPN:", errors);
 
     const groupsTOTAL = standings.filter((s) => s.type === 'TOTAL');
+    const closedGroups = groupsTOTAL.filter(isClosedGroupStanding);
+    const finishedKnockoutMatches = (matches || []).filter((m) => m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE');
 
     // ==========================================
     // PARTE A: ACTUALITZAR LA TAULA group_results
     // ==========================================
-    const groupRowsToUpsert = groupsTOTAL.map((g) => {
-      const groupName = g.group.replace(/^(Group|Grup)\s+/i, '');
+    let actualChampion = null;
+    const finalMatch = finishedKnockoutMatches.find((m) => m.stage === 'FINAL');
+    if (finalMatch) actualChampion = getMatchWinner(finalMatch);
+
+    const groupRowsToUpsert = closedGroups.map((g) => {
+      const groupName = normalizeGroupName(g.group);
       const sortedTable = [...g.table].sort((a, b) => a.position - b.position);
       
       return {
@@ -415,12 +445,42 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
       };
     });
 
+    if (actualChampion) {
+      groupRowsToUpsert.push({
+        group_name: 'campio',
+        actual_1st: actualChampion,
+        actual_2nd: null,
+        actual_3rd: null,
+        actual_4th: null,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
     if (groupRowsToUpsert.length > 0) {
       const { error: errGroup } = await dbClient
         .from('group_results')
         .upsert(groupRowsToUpsert, { onConflict: 'group_name' });
         
       if (errGroup) throw new Error("Error a group_results: " + errGroup.message);
+    }
+
+    const knockoutRowsToUpsert = finishedKnockoutMatches.map((match) => ({
+      match_key: String(match.id),
+      round: STAGE_TO_SCORING_ROUND[match.stage] || match.round || null,
+      winner: getMatchWinner(match),
+      home_team: match.homeTeam?.name || match.homeTeam || null,
+      away_team: match.awayTeam?.name || match.awayTeam || null,
+      home_goals: match.score?.fullTime?.home ?? null,
+      away_goals: match.score?.fullTime?.away ?? null,
+      updated_at: new Date().toISOString(),
+    }));
+
+    if (knockoutRowsToUpsert.length > 0) {
+      const { error: errKnockout } = await dbClient
+        .from(KNOCKOUT_RESULTS_TABLE)
+        .upsert(knockoutRowsToUpsert, { onConflict: 'match_key' });
+
+      if (errKnockout) throw new Error(`Error a ${KNOCKOUT_RESULTS_TABLE}: ` + errKnockout.message);
     }
 
     // ==========================================
@@ -438,33 +498,31 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
     const { data: allChampionPreds, error: errChamp } = await dbClient.from('champion_predictions').select('*');
     if (errChamp) throw errChamp;
 
-    let actualChampion = null;
+    const { data: cachedGroupResults, error: errCachedGroups } = await dbClient.from('group_results').select('*');
+    if (errCachedGroups) throw errCachedGroups;
 
-    // Busquem si la final del mundial ha finalitzat per treure el campió real
-    const finalMatch = matches.find(m => m.stage === 'FINAL' && m.status === 'FINISHED');
-    if (finalMatch) {
-      const hGoals = finalMatch.score?.fullTime?.home;
-      const aGoals = finalMatch.score?.fullTime?.away;
-      actualChampion = hGoals > aGoals ? finalMatch.homeTeam?.name : finalMatch.awayTeam?.name;
-    }
+    const { data: cachedKnockoutResults, error: errCachedKnockout } = await dbClient.from(KNOCKOUT_RESULTS_TABLE).select('*');
+    if (errCachedKnockout) throw errCachedKnockout;
+
+    const cachedChampion = (cachedGroupResults || []).find((row) => row.group_name === 'campio')?.actual_1st || null;
 
     const actualDataFormatted = {
-      groups: groupsTOTAL.map(g => ({
-        groupName: g.group.replace(/^(Group|Grup)\s+/i, ''),
-        top3: [...g.table].sort((a, b) => a.position - b.position).slice(0, 3).map(t => t.team?.name)
-      })),
-      matches: (matches || [])
-        .filter(m => m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE')
-        .map(m => ({
-          id: String(m.id),
-          round: STAGE_TO_SCORING_ROUND[m.stage] || m.round || null,
-          winner: m.winner,
-          homeGoals: m.score?.fullTime?.home,
-          awayGoals: m.score?.fullTime?.away,
-          homeTeam: m.homeTeam?.name || m.homeTeam,
-          awayTeam: m.awayTeam?.name || m.awayTeam,
+      groups: (cachedGroupResults || [])
+        .filter((row) => row.group_name !== 'campio')
+        .map((row) => ({
+          groupName: normalizeGroupName(row.group_name),
+          top3: [row.actual_1st, row.actual_2nd, row.actual_3rd].filter(Boolean),
         })),
-      champion: actualChampion
+      matches: (cachedKnockoutResults || []).map((match) => ({
+        id: String(match.match_key),
+        round: match.round,
+        winner: match.winner,
+        homeGoals: match.home_goals,
+        awayGoals: match.away_goals,
+        homeTeam: match.home_team,
+        awayTeam: match.away_team,
+      })),
+      champion: cachedChampion
     };
 
     const clasificacionRows = [];

@@ -362,7 +362,7 @@ test('fetchWCData retorna matches i standings en èxit', async () => {
       altGameNote: 'FIFA World Cup, Group A',
       status: { type: { name: 'STATUS_FULL_TIME' } },
       competitors: [
-        { homeAway: 'home', score: '2', team: { displayName: 'Spain' } },
+        { homeAway: 'home', score: '2', winner: true, team: { displayName: 'Spain' } },
         { homeAway: 'away', score: '1', team: { displayName: 'Brazil' } },
       ],
     }],
@@ -400,6 +400,7 @@ test('fetchWCData retorna matches i standings en èxit', async () => {
   assert.equal(result.matches.length, 1);
   assert.equal(result.matches[0].homeTeam.name, 'Spain');
   assert.equal(result.matches[0].status, 'FINISHED');
+  assert.equal(result.matches[0].winner, 'Spain');
   assert.equal(result.standings.length, 1);
   assert.equal(result.standings[0].group, 'Group A');
   assert.equal(result.errors.length, 0);
@@ -504,10 +505,10 @@ test('adminUpdateSystem usa fetchData injectat i completa el recàlcul', async (
           type: 'TOTAL',
           group: 'Group A',
           table: [
-            { position: 1, team: { name: 'Spain' } },
-            { position: 2, team: { name: 'Brazil' } },
-            { position: 3, team: { name: 'Germany' } },
-            { position: 4, team: { name: 'Japan' } },
+            { position: 1, playedGames: 3, team: { name: 'Spain' } },
+            { position: 2, playedGames: 3, team: { name: 'Brazil' } },
+            { position: 3, playedGames: 3, team: { name: 'Germany' } },
+            { position: 4, playedGames: 3, team: { name: 'Japan' } },
           ],
         }],
         errors: [],
@@ -528,11 +529,16 @@ test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () 
   globalThis.alert = () => {};
 
   let clasificacionRows = [];
+  const knockoutRows = [];
   const dbClient = {
     from(table) {
       return {
         async upsert(rows) {
           if (table === 'clasificacion') clasificacionRows = rows;
+          if (table === 'knockout_results') {
+            knockoutRows.length = 0;
+            knockoutRows.push(...rows);
+          }
           return { error: null };
         },
         async select() {
@@ -552,6 +558,7 @@ test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () 
             };
           }
           if (table === 'champion_predictions') return { data: [], error: null };
+          if (table === 'knockout_results') return { data: knockoutRows, error: null };
           return { data: [], error: null };
         },
       };
@@ -579,6 +586,132 @@ test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () 
   assert.equal(result, true);
   // semifinals: winner (20) + exact score (40) = 60
   assert.equal(clasificacionRows[0]?.puntos, 60);
+
+  globalThis.alert = originalAlert;
+});
+
+test('adminUpdateSystem persisteix caches tancades i recalcula classificacio des de BDD', async () => {
+  const originalAlert = globalThis.alert;
+  globalThis.alert = () => {};
+
+  const storage = {
+    group_results: [],
+    knockout_results: [],
+    clasificacion: [],
+  };
+
+  const upsertRow = (table, row) => {
+    const key = table === 'group_results' ? 'group_name' : table === 'knockout_results' ? 'match_key' : 'username';
+    const index = storage[table].findIndex((item) => item[key] === row[key]);
+    if (index >= 0) storage[table][index] = { ...storage[table][index], ...row };
+    else storage[table].push({ ...row });
+  };
+
+  const dbClient = {
+    from(table) {
+      return {
+        async upsert(rows) {
+          const list = Array.isArray(rows) ? rows : [rows];
+          if (storage[table]) list.forEach((row) => upsertRow(table, row));
+          return { error: null };
+        },
+        async select() {
+          if (table === 'participants') {
+            return { data: [{ username: 'ADM' }, { username: 'ANA' }], error: null };
+          }
+          if (table === 'group_predictions') {
+            return {
+              data: [{
+                username: 'ANA',
+                group_name: 'A',
+                pred_1st: 'Spain',
+                pred_2nd: 'Brazil',
+                pred_3rd: 'Germany',
+              }],
+              error: null,
+            };
+          }
+          if (table === 'pronostics') {
+            return {
+              data: [{
+                username: 'ANA',
+                match_key: '77',
+                pred_home_goals: 1,
+                pred_away_goals: 0,
+                tie_winner: null,
+                round: 'final',
+              }],
+              error: null,
+            };
+          }
+          if (table === 'champion_predictions') {
+            return { data: [{ username: 'ANA', champion: 'Spain' }], error: null };
+          }
+          return { data: storage[table] ?? [], error: null };
+        },
+      };
+    },
+  };
+
+  const result = await adminUpdateSystem({
+    currentUser: { username: 'ADM', tipus: 'admin' },
+    dbClient,
+    fetchData: async () => ({
+      matches: [{
+        id: '77',
+        status: 'FINISHED',
+        stage: 'FINAL',
+        winner: 'Spain',
+        homeTeam: { name: 'Spain' },
+        awayTeam: { name: 'Brazil' },
+        score: { fullTime: { home: 1, away: 0 } },
+      }],
+      standings: [
+        {
+          type: 'TOTAL',
+          group: 'Group A',
+          table: [
+            { position: 1, playedGames: 3, team: { name: 'Spain' } },
+            { position: 2, playedGames: 3, team: { name: 'Brazil' } },
+            { position: 3, playedGames: 3, team: { name: 'Germany' } },
+            { position: 4, playedGames: 3, team: { name: 'Japan' } },
+          ],
+        },
+        {
+          type: 'TOTAL',
+          group: 'Group B',
+          table: [
+            { position: 1, playedGames: 3, team: { name: 'France' } },
+            { position: 2, playedGames: 3, team: { name: 'Argentina' } },
+            { position: 3, playedGames: 2, team: { name: 'Mexico' } },
+            { position: 4, playedGames: 3, team: { name: 'Canada' } },
+          ],
+        },
+      ],
+      errors: [],
+    }),
+  });
+
+  assert.equal(result, true);
+  assert.equal(storage.group_results.length, 2);
+  assert.equal(storage.group_results.find((row) => row.group_name === 'A')?.actual_1st, 'Spain');
+  assert.equal(storage.group_results.find((row) => row.group_name === 'campio')?.actual_1st, 'Spain');
+  assert.equal(storage.group_results.some((row) => row.group_name === 'B'), false);
+
+  assert.equal(storage.knockout_results.length, 1);
+  assert.deepEqual(storage.knockout_results[0], {
+    match_key: '77',
+    round: 'final',
+    winner: 'Spain',
+    home_team: 'Spain',
+    away_team: 'Brazil',
+    home_goals: 1,
+    away_goals: 0,
+    updated_at: storage.knockout_results[0].updated_at,
+  });
+
+  assert.equal(storage.clasificacion.find((row) => row.username === 'ANA')?.puntos, 210);
+  assert.equal(storage.clasificacion.find((row) => row.username === 'ADM')?.puntos, 0);
 
   globalThis.alert = originalAlert;
 });
