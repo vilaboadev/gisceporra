@@ -31,6 +31,7 @@ let wcFetchedAt = 0;    // timestamp of last fetch
 let homeRefreshTimer = null;
 const WC_TTL_NORMAL = 3 * 60 * 1000;   // 3 min cache when no live match
 const WC_TTL_LIVE   = 45 * 1000;        // 45 s cache when live match
+const BET_FORM_REFRESH_DELAY_MS = 1200;
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function hashPwd(p) {
@@ -903,7 +904,7 @@ async function saveBet(form) {
     setTimeout(() => {
       loadBetForm();
       loadHome();
-    }, 1200);
+    }, BET_FORM_REFRESH_DELAY_MS);
 
   } catch (err) {
     statusEl.textContent = `❌ ${err.message}`;
