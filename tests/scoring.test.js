@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { calculateCrystalBallPoints, calculateGroupPoints, calculateKnockoutPoints, calculateGroupPointsDetailed } from '../src/scoring.js';
+import {
+  calculateCrystalBallPoints,
+  calculateGroupPoints,
+  calculateKnockoutPoints,
+  calculateGroupPointsDetailed,
+  getKnockoutPointsBadgeColor,
+} from '../src/scoring.js';
 
 test('calculateGroupPoints gives 5 for top3 and 5 more for exact position (10 total)', () => {
   // Predicted: [A, B, C], Actual: [B, A, C]
@@ -101,12 +107,28 @@ test('calculateKnockoutPoints gives only exact points when draw result but wrong
   assert.equal(points, 10);
 });
 
+test('getKnockoutPointsBadgeColor is yellow when exact draw but wrong tie_winner', () => {
+  const color = getKnockoutPointsBadgeColor(
+    { homeGoals: 1, awayGoals: 1, tieWinner: 'Netherlands' },
+    { round: 'setzens', winner: 'Morocco', homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(color, 'pts-yellow');
+});
+
 test('calculateKnockoutPoints gives winner + exact points when draw result and correct tie_winner', () => {
   const points = calculateKnockoutPoints(
     { homeGoals: 1, awayGoals: 1, tieWinner: 'Morocco' },
     { round: 'setzens', winner: 'Morocco', homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
   );
   assert.equal(points, 20);
+});
+
+test('getKnockoutPointsBadgeColor is green when exact draw and correct tie_winner', () => {
+  const color = getKnockoutPointsBadgeColor(
+    { homeGoals: 1, awayGoals: 1, tieWinner: 'Morocco' },
+    { round: 'setzens', winner: 'Morocco', homeGoals: 1, awayGoals: 1, homeTeam: 'Netherlands', awayTeam: 'Morocco' },
+  );
+  assert.equal(color, 'pts-green');
 });
 
 test('calculateKnockoutPoints gives exact points only when both winner and tie_winner are null but score matches', () => {
