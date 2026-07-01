@@ -667,7 +667,6 @@ body {
   justify-content: center;
 }
 .ko-dash { color: var(--text3); font-size: .8rem; }
-.ko-pen { font-size: .72rem; }
 
 /* Blue highlight for advancing teams/scores */
 .ko-adv { color: var(--accent) !important; font-weight: 700; }
