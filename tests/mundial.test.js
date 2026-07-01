@@ -584,8 +584,8 @@ test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () 
   });
 
   assert.equal(result, true);
-  // semifinals: winner (20) + exact score (40) = 60
-  assert.equal(clasificacionRows[0]?.puntos, 60);
+  // semifinals: winner (20) + exact score (20) = 40
+  assert.equal(clasificacionRows[0]?.puntos, 40);
 
   globalThis.alert = originalAlert;
 });
@@ -710,7 +710,7 @@ test('adminUpdateSystem persisteix caches tancades i recalcula classificacio des
     updated_at: storage.knockout_results[0].updated_at,
   });
 
-  assert.equal(storage.clasificacion.find((row) => row.username === 'ANA')?.puntos, 210);
+  assert.equal(storage.clasificacion.find((row) => row.username === 'ANA')?.puntos, 180);
   assert.equal(storage.clasificacion.find((row) => row.username === 'ADM')?.puntos, 0);
 
   globalThis.alert = originalAlert;

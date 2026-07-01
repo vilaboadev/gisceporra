@@ -1,19 +1,19 @@
 const KNOCKOUT_POINTS = {
-  dieciseisavos: { winner: 10, exact: 20 },
-  octavos: { winner: 10, exact: 20 },
-  setzens: { winner: 10, exact: 20 },
-  vuitens: { winner: 10, exact: 20 },
-  ROUND_OF_32: { winner: 10, exact: 20 },
-  ROUND_OF_16: { winner: 10, exact: 20 },
-  quarter_finals: { winner: 15, exact: 30 },
-  quarts: { winner: 15, exact: 30 },
-  QUARTER_FINALS: { winner: 15, exact: 30 },
-  semi_finals: { winner: 20, exact: 40 },
-  semifinals: { winner: 20, exact: 40 },
-  SEMI_FINALS: { winner: 20, exact: 40 },
-  THIRD_PLACE: { winner: 20, exact: 40 },
-  final: { winner: 30, exact: 50 },
-  FINAL: { winner: 30, exact: 50 },
+  dieciseisavos: { winner: 10, exact: 10 },
+  octavos: { winner: 10, exact: 10 },
+  setzens: { winner: 10, exact: 10 },
+  vuitens: { winner: 10, exact: 10 },
+  ROUND_OF_32: { winner: 10, exact: 10 },
+  ROUND_OF_16: { winner: 10, exact: 10 },
+  quarter_finals: { winner: 15, exact: 15 },
+  quarts: { winner: 15, exact: 15 },
+  QUARTER_FINALS: { winner: 15, exact: 15 },
+  semi_finals: { winner: 20, exact: 20 },
+  semifinals: { winner: 20, exact: 20 },
+  SEMI_FINALS: { winner: 20, exact: 20 },
+  THIRD_PLACE: { winner: 20, exact: 20 },
+  final: { winner: 30, exact: 20 },
+  FINAL: { winner: 30, exact: 20 },
 };
 
 export function calculateGroupPoints(predictedTop3 = [], actualTop3 = []) {
@@ -70,7 +70,7 @@ export function calculateKnockoutPoints(prediction, result) {
       ? result.homeTeam
       : result.awayTeam;
 
-  const winnerPoints = predictedWinner === result.winner ? round.winner : 0;
+  const winnerPoints = predictedWinner && result.winner && predictedWinner === result.winner ? round.winner : 0;
   const exactPoints =
     prediction.homeGoals === result.homeGoals && prediction.awayGoals === result.awayGoals
       ? round.exact
