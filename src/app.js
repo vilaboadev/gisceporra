@@ -630,8 +630,6 @@ function buildKoPronosHtml(bets, finishedKO) {
     // Highlighting: which side did we predict to advance
     const predHomeAdv = predWinner === bet.home_team;
     const predAwayAdv = predWinner === bet.away_team;
-    // For draws: only team name highlighted (both goal numbers are equal)
-    const isDraw = Number(bet.pred_home_goals) === Number(bet.pred_away_goals);
 
     const stageLabel = STAGE_LABELS[match.stage] ?? match.stage?.replace(/_/g, ' ');
     const d = new Date(match.utcDate);
@@ -639,17 +637,6 @@ function buildKoPronosHtml(bets, finishedKO) {
 
     // Points badge color: green only when exact score + winner are both correct
     const ptsColor = getKnockoutPointsBadgeColor(predictionData, resultData);
-
-    // Draw case in actual: when scores equal, show winner name as pen. indicator
-    const actualIsDraw = typeof actualHome === 'number' && typeof actualAway === 'number' && actualHome === actualAway;
-    const penSuffix = actualIsDraw && actualWinner
-      ? ` <span class="ko-adv ko-pen">${teamWithFlag(actualWinner)} (penals)</span>`
-      : '';
-
-    // Draw case in prediction: when predicted scores equal, show predicted tie_winner
-    const predPenSuffix = isDraw && bet.tie_winner
-      ? ` <span class="ko-adv ko-pen">${teamWithFlag(bet.tie_winner)} (penals)</span>`
-      : '';
 
     return `<div class="ko-bet-card card">
       <div class="ko-header">
@@ -663,18 +650,18 @@ function buildKoPronosHtml(bets, finishedKO) {
           <div class="ko-scores-row">
             <span class="ko-row-lbl muted">Pron.</span>
             <span class="ko-score-pair">
-              <span class="${!isDraw && predHomeAdv ? 'ko-adv' : ''}">${bet.pred_home_goals}</span>
+              <span class="${predHomeAdv ? 'ko-adv' : ''}">${bet.pred_home_goals}</span>
               <span class="ko-dash">–</span>
-              <span class="${!isDraw && predAwayAdv ? 'ko-adv' : ''}">${bet.pred_away_goals}</span>
-            </span>${predPenSuffix}
+              <span class="${predAwayAdv ? 'ko-adv' : ''}">${bet.pred_away_goals}</span>
+            </span>
           </div>
           <div class="ko-scores-row">
             <span class="ko-row-lbl muted">Real</span>
             <span class="ko-score-pair">
-              <span class="${actualWinnerSide === 'home' && !actualIsDraw ? 'ko-adv' : ''}">${actualHome}</span>
+              <span class="${actualWinnerSide === 'home' ? 'ko-adv' : ''}">${actualHome}</span>
               <span class="ko-dash">–</span>
-              <span class="${actualWinnerSide === 'away' && !actualIsDraw ? 'ko-adv' : ''}">${actualAway}</span>
-            </span>${penSuffix}
+              <span class="${actualWinnerSide === 'away' ? 'ko-adv' : ''}">${actualAway}</span>
+            </span>
           </div>
         </div>
         <span class="ko-team right ${predAwayAdv ? 'ko-adv' : ''}">${teamWithFlag(bet.away_team)}</span>
