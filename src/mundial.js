@@ -457,7 +457,7 @@ export async function adminUpdateSystem({ currentUser = null, dbClient = null, f
         .filter(m => m.status === 'FINISHED' && m.stage && m.stage !== 'GROUP_STAGE')
         .map(m => ({
           id: String(m.id),
-          round: m.round || STAGE_TO_SCORING_ROUND[m.stage] || null,
+          round: STAGE_TO_SCORING_ROUND[m.stage] || m.round || null,
           winner: m.winner,
           homeGoals: m.score?.fullTime?.home,
           awayGoals: m.score?.fullTime?.away,

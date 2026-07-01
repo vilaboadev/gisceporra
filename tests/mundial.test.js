@@ -577,6 +577,7 @@ test('adminUpdateSystem recalcula punts d’eliminatòries assolides', async () 
   });
 
   assert.equal(result, true);
+  // semifinals: winner (20) + exact score (40) = 60
   assert.equal(clasificacionRows[0]?.puntos, 60);
 
   globalThis.alert = originalAlert;
