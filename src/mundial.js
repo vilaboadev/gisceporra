@@ -53,6 +53,7 @@ const STAGE_TO_SCORING_ROUND = {
   ROUND_OF_16: 'vuitens',
   QUARTER_FINALS: 'quarts',
   SEMI_FINALS: 'semifinals',
+  THIRD_PLACE: 'THIRD_PLACE',
   FINAL: 'final',
 };
 const KNOCKOUT_RESULTS_TABLE = 'knockout_results';

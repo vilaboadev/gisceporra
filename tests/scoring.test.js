@@ -170,8 +170,19 @@ test('calculateKnockoutPoints max points per round', () => {
   ), 40);
   assert.equal(calculateKnockoutPoints(
     { homeGoals: 2, awayGoals: 1 },
+    { round: 'THIRD_PLACE', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
+  ), 40);
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 1 },
     { round: 'final', winner: 'L', homeGoals: 2, awayGoals: 1, homeTeam: 'L', awayTeam: 'V' },
   ), 50);
+});
+
+test('calculateKnockoutPoints THIRD_PLACE: only winner no score match', () => {
+  assert.equal(calculateKnockoutPoints(
+    { homeGoals: 2, awayGoals: 0 },
+    { round: 'THIRD_PLACE', winner: 'L', homeGoals: 1, awayGoals: 0, homeTeam: 'L', awayTeam: 'V' },
+  ), 20);
 });
 
 test('calculateCrystalBallPoints adds bonus', () => {

@@ -173,7 +173,7 @@ function toggleInfo() {
         <tbody>
           <tr><td>Setzens/Vuitens</td><td>10 pts</td><td>20 pts</td></tr>
           <tr><td>Quarts de final</td><td>15 pts</td><td>30 pts</td></tr>
-          <tr><td>Semifinals</td><td>20 pts</td><td>40 pts</td></tr>
+          <tr><td>Semifinals / 3r i 4t lloc</td><td>20 pts</td><td>40 pts</td></tr>
           <tr><td>Final</td><td>30 pts</td><td>50 pts</td></tr>
         </tbody>
       </table>
