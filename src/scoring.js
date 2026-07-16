@@ -11,6 +11,7 @@ const KNOCKOUT_POINTS = {
   semi_finals: { winner: 20, exact: 20 },
   semifinals: { winner: 20, exact: 20 },
   SEMI_FINALS: { winner: 20, exact: 20 },
+  tercerlloc: { winner: 20, exact: 20 },
   THIRD_PLACE: { winner: 20, exact: 20 },
   final: { winner: 30, exact: 20 },
   FINAL: { winner: 30, exact: 20 },
