@@ -8,6 +8,23 @@
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
 import { getTeamInfo } from './hyper-teams.js';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Escapa caràcters HTML per evitar XSS. */
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+/** Validates an URL as http(s)-only to prevent javascript: scheme injection. */
+function safeSrc(url) {
+  return /^https?:\/\//.test(url ?? '') ? url : '';
+}
+
 // ── TheSportDB API ─────────────────────────────────────────────────────────
 const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
 
@@ -92,11 +109,13 @@ export function formatHyperMatchDate(dateStr, timeStr = '') {
  * @param {string} timeStr  "HH:MM:SS"
  * @returns {boolean}
  */
+const HYPER_PREDICTION_LOCKOUT_MS = 60 * 60 * 1000; // 1 hora en ms
+
 export function isPredictionLocked(dateStr, timeStr = '00:00:00') {
   if (!dateStr) return true;
   const isoStr = `${dateStr}T${timeStr}Z`;
   const matchTime = new Date(isoStr).getTime();
-  return Date.now() > matchTime - 60 * 60 * 1000;
+  return Date.now() > matchTime - HYPER_PREDICTION_LOCKOUT_MS;
 }
 
 // ── Renderitzat: Pantalla d'Inici ──────────────────────────────────────────

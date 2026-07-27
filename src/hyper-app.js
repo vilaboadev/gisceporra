@@ -25,6 +25,26 @@ const $ = id => document.getElementById(id);
 const show = id => $( id)?.classList.remove('hidden');
 const hide = id => $( id)?.classList.add('hidden');
 
+/** Escapa caràcters HTML per evitar XSS. */
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+/** Mostra un missatge d'error a un element usant textContent per evitar XSS. */
+function showError(el, msg) {
+  if (!el) return;
+  el.textContent = '';
+  const p = document.createElement('p');
+  p.className = 'muted';
+  p.textContent = `Error: ${msg}`;
+  el.appendChild(p);
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let hyperCurrentScreen = 'info';
 let hyperTeamCache = null;     // dades theSportDB de l'equip
@@ -103,7 +123,7 @@ async function loadHyperInfo() {
       });
     });
   } catch (err) {
-    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+    showError(el, err.message);
   }
 }
 
@@ -229,7 +249,7 @@ async function loadHyperRanking() {
     el.innerHTML = hyperRankingDetailedHtml(entries, user?.username ?? '', nowMs);
 
   } catch (err) {
-    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+    showError(el, err.message);
   }
 }
 
@@ -263,7 +283,7 @@ async function loadHyperClub() {
     hyperPlayersCache = players;
     el.innerHTML = hyperClubHtml(teamData, teamId, players);
   } catch (err) {
-    el.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+    showError(el, err.message);
   }
 }
 
@@ -276,16 +296,19 @@ function loadHyperProfile() {
   if (!user) return;
 
   const teamInfo = getTeamInfo(user.hyper_team_id ?? '');
-  const displayName = user.nickname || user.display_name || user.username;
   const crest = teamInfo?.crest ?? '⚽';
+
+  // Validate avatar URL — only allow http(s) URLs
+  const rawAvatarUrl = user.avatar_url ?? '';
+  const safeAvatarUrl = /^https?:\/\//.test(rawAvatarUrl) ? rawAvatarUrl : '';
 
   el.innerHTML = `
     <div class="hyper-profile card">
       <div class="hp-avatar-wrap">
         <div class="hp-avatar-circle" id="hp-avatar-preview">
-          ${user.avatar_url
-            ? `<img src="${user.avatar_url}" alt="Avatar" class="hp-avatar-img" />`
-            : `<span class="hp-avatar-initials">${user.username.slice(0,2)}</span>`
+          ${safeAvatarUrl
+            ? `<img src="${escHtml(safeAvatarUrl)}" alt="Avatar" class="hp-avatar-img" />`
+            : `<span class="hp-avatar-initials">${escHtml(user.username.slice(0,2))}</span>`
           }
           <span class="hp-crest-overlay">${crest}</span>
         </div>
@@ -294,20 +317,20 @@ function loadHyperProfile() {
       <div class="hp-team-info card">
         <div class="hp-team-crest">${crest}</div>
         <div>
-          <div class="hp-team-name">${teamInfo?.displayName ?? user.hyper_team_id ?? 'Sense equip'}</div>
-          <div class="hp-team-stadium muted">${teamInfo?.stadium ?? ''}</div>
+          <div class="hp-team-name">${escHtml(teamInfo?.displayName ?? user.hyper_team_id ?? 'Sense equip')}</div>
+          <div class="hp-team-stadium muted">${escHtml(teamInfo?.stadium ?? '')}</div>
         </div>
       </div>
 
       <form id="hyper-profile-form" class="hp-form">
         <div class="form-group">
           <label for="hp-nickname">Nom de jugador (nickname)</label>
-          <input id="hp-nickname" type="text" maxlength="30" placeholder="${user.username}"
-                 value="${user.nickname ?? user.display_name ?? ''}" />
+          <input id="hp-nickname" type="text" maxlength="30" placeholder="${escHtml(user.username)}"
+                 value="${escHtml(user.nickname ?? user.display_name ?? '')}" />
         </div>
         <div class="form-group">
           <label for="hp-avatar-url">URL imatge avatar (opcional)</label>
-          <input id="hp-avatar-url" type="url" placeholder="https://…" value="${user.avatar_url ?? ''}" />
+          <input id="hp-avatar-url" type="url" placeholder="https://…" value="${escHtml(safeAvatarUrl)}" />
         </div>
         <button type="submit" class="btn-primary">Guardar canvis</button>
         <p class="bet-status status-msg" id="hp-save-status"></p>
@@ -408,8 +431,15 @@ function updateHyperHeader() {
   const labelEl    = $('hyper-user-label');
 
   if (initialsEl) {
-    if (user.avatar_url) {
-      initialsEl.innerHTML = `<img src="${user.avatar_url}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`;
+    const rawAvatarUrl = user.avatar_url ?? '';
+    const safeAvatarUrl = /^https?:\/\//.test(rawAvatarUrl) ? rawAvatarUrl : '';
+    if (safeAvatarUrl) {
+      const img = document.createElement('img');
+      img.src = safeAvatarUrl;
+      img.alt = 'avatar';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
+      initialsEl.textContent = '';
+      initialsEl.appendChild(img);
     } else {
       initialsEl.textContent = user.username.slice(0, 2);
     }
