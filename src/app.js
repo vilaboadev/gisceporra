@@ -33,6 +33,13 @@ const WC_TTL_NORMAL = 3 * 60 * 1000;   // 3 min cache when no live match
 const WC_TTL_LIVE   = 45 * 1000;        // 45 s cache when live match
 const BET_FORM_REFRESH_DELAY_MS = 1200;
 
+// Expose shared state for hyper-app.js
+window.__app = {
+  get currentUser() { return currentUser; },
+  get supabase() { return supabase; },
+  showLogin() { showLogin(); },
+};
+
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function hashPwd(p) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(p));
@@ -47,14 +54,14 @@ async function login(username, password) {
   // Usuari test hardcoded — sempre accessible independentment de Supabase
   const testHash = await hashPwd('TST');
   if (raw.toLowerCase() === 'TST' && hash === testHash) {
-    return { username: 'TST', display_name: 'Test User', tipus: 'normal' };
+    return { username: 'TST', display_name: 'Test User', tipus: 'normal', porra_mundial: true, porra_hyper: false };
   }
 
   if (supabase) {
     // Prova uppercase (format inicials: MVF, AOG…) i lowercase com a fallback
     const { data, error } = await supabase
       .from('participants')
-      .select('username, display_name, tipus')
+      .select('username, display_name, tipus, porra_mundial, porra_hyper, hyper_team_id, nickname, avatar_url')
       .eq('username', uname)
       .eq('password_hash', hash)
       .maybeSingle();
@@ -102,6 +109,8 @@ window.navigate = navigate; // make accessible from inline onclick
 // ── Screen: Login ─────────────────────────────────────────────────────────
 function showLogin() {
   hide('app');
+  hide('hyper-app');
+  hide('league-selector');
   show('login-screen');
   $('login-username')?.focus();
 }
@@ -110,13 +119,51 @@ function showApp(user) {
   currentUser = user;
   localStorage.setItem('gp_session', JSON.stringify(user));
   hide('login-screen');
+
+  // Determinar quin(s) accés(os) té l'usuari:
+  // porra_mundial null → tractat com a true (usuaris legats del mundial)
+  const hasMundial = user.porra_mundial !== false;
+  const hasHyper   = !!user.porra_hyper;
+
+  if (hasMundial && hasHyper) {
+    // Mostrar selector de porra
+    showLeagueSelector();
+  } else if (hasHyper) {
+    // Només hyper → anar directament a Hypermotion
+    window.enterLeague?.('hyper');
+  } else {
+    // Cas per defecte (mundial o legat) → entrar al mundial
+    enterMundialApp();
+  }
+}
+
+function enterMundialApp() {
+  hide('league-selector');
+  hide('hyper-app');
   show('app');
-  $('user-avatar').textContent = user.username.slice(0, 2);
-  $('user-label').textContent = user.display_name || user.username;
-  const isAdmin = user?.tipus === 'admin';
+  $('user-avatar').textContent = currentUser.username.slice(0, 2);
+  $('user-label').textContent = currentUser.display_name || currentUser.username;
+  const isAdmin = currentUser?.tipus === 'admin';
   $('admin-recalc-btn')?.classList.toggle('hidden', !isAdmin);
   navigate('principal');
 }
+
+function showLeagueSelector() {
+  hide('app');
+  hide('hyper-app');
+  show('league-selector');
+}
+
+window.enterLeague = function enterLeague(which) {
+  if (which === 'mundial') {
+    enterMundialApp();
+  } else if (which === 'hyper') {
+    hide('app');
+    hide('league-selector');
+    show('hyper-app');
+    window.hyperNavigate?.('info');
+  }
+};
 
 $('login-form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -134,11 +181,16 @@ $('login-form').addEventListener('submit', async e => {
   }
 });
 
-$('logout-btn').addEventListener('click', () => {
+function doLogout() {
   currentUser = null;
   localStorage.removeItem('gp_session');
   showLogin();
-});
+}
+
+$('logout-btn').addEventListener('click', doLogout);
+$('selector-logout-btn')?.addEventListener('click', doLogout);
+$('sel-hyper-btn')?.addEventListener('click', () => window.enterLeague('hyper'));
+$('sel-mundial-btn')?.addEventListener('click', () => window.enterLeague('mundial'));
 
 $('info-btn').addEventListener('click', toggleInfo);
 const adminRecalcBtn = $('admin-recalc-btn');

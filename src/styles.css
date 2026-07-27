@@ -717,3 +717,391 @@ body {
 .next-match-row:last-child { border-bottom: none; }
 .nm-teams { display: flex; align-items: center; gap: .5rem; font-size: .85rem; margin-bottom: .15rem; }
 .nm-time { font-size: .8rem; color: var(--text3); }
+
+/* ═══════════════════════════════════════════════
+   Porra-League Hypermotion — Styles
+   ═══════════════════════════════════════════════ */
+
+/* ─── League Selector ────────────────────────── */
+#league-selector {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: radial-gradient(ellipse at 50% 0%, #1a2340 0%, var(--bg) 70%);
+}
+
+.selector-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.selector-logo { font-size: 3rem; }
+.selector-title { font-size: 1.5rem; font-weight: 700; text-align: center; }
+.selector-subtitle { color: var(--text2); font-size: .9rem; }
+
+.selector-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  width: 100%;
+}
+
+.selector-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.selector-btn:hover { border-color: var(--accent); background: rgba(59,130,246,.08); }
+
+.hyper-sel-btn:hover { border-color: #22c55e; background: rgba(34,197,94,.08); }
+.mundial-sel-btn { opacity: .85; }
+.mundial-sel-btn:hover { opacity: 1; }
+
+.sel-icon { font-size: 1.8rem; flex-shrink: 0; }
+.sel-text { display: flex; flex-direction: column; gap: .15rem; flex: 1; }
+.sel-label { font-size: 1rem; font-weight: 600; }
+.sel-sub { font-size: .75rem; color: var(--text2); }
+.sel-arrow { color: var(--text3); font-size: 1.1rem; }
+
+.btn-link-muted {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: .85rem;
+  padding: .25rem .5rem;
+}
+.btn-link-muted:hover { color: var(--text2); }
+
+/* ─── Hyper App Layout ────────────────────────── */
+#hyper-app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+#hyper-header {
+  height: var(--header-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+#hyper-main {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: calc(var(--nav-h) + .5rem);
+}
+
+#hyper-nav {
+  height: var(--nav-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-shrink: 0;
+  z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* ─── Hyper Avatar (amb crest sobreimprès) ──────── */
+.hyper-avatar-wrap {
+  position: relative;
+  width: 36px; height: 36px;
+  flex-shrink: 0;
+}
+.ha-initials {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700; color: #fff;
+  overflow: hidden;
+}
+.ha-crest {
+  position: absolute;
+  bottom: -2px; right: -4px;
+  font-size: .85rem;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,.7);
+}
+
+/* ─── Hyper Info Screen ───────────────────────── */
+.hyper-team-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: .5rem;
+}
+.htb-crest { font-size: 2rem; }
+.htb-name { font-size: 1rem; font-weight: 700; }
+
+.hyper-match-card { margin-bottom: .75rem; }
+.hyper-match-card.locked { opacity: .8; }
+
+.hmc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .5rem;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.hmc-date { font-size: .8rem; }
+.hmc-teams {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .5rem;
+}
+.hmc-team { font-size: .9rem; font-weight: 500; flex: 1; }
+.hmc-team.hmc-mine { color: var(--accent); font-weight: 700; }
+.hmc-vs { color: var(--text3); font-size: .8rem; }
+
+.hyper-badge-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: rgba(34,197,94,.15);
+  border: 1px solid var(--green);
+  color: var(--green);
+  border-radius: 20px;
+  font-size: .75rem;
+  padding: .15rem .5rem;
+  font-weight: 600;
+}
+
+.hyper-badge-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: rgba(249,115,22,.12);
+  border: 1px solid var(--orange);
+  color: var(--orange);
+  border-radius: 20px;
+  font-size: .75rem;
+  padding: .15rem .5rem;
+  font-weight: 600;
+}
+
+.hyper-pred-locked {
+  font-size: .8rem;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: .15rem .5rem;
+}
+
+/* ─── Hyper Result Cards ──────────────────────── */
+.hyper-result-card { margin-bottom: .5rem; }
+.hrc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .4rem;
+}
+.hrc-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.hrc-team { font-size: .85rem; flex: 1; }
+.hrc-team.right { text-align: right; }
+.hrc-score { font-size: 1rem; font-weight: 700; min-width: 3.5rem; text-align: center; }
+.hrc-pred { font-size: .78rem; margin-top: .25rem; }
+
+/* ─── Hyper Ranking ───────────────────────────── */
+.hyper-ranking { display: flex; flex-direction: column; gap: .5rem; }
+
+.hyper-rank-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .75rem 1rem;
+}
+.hyper-rank-item.is-me {
+  border-color: var(--accent);
+  background: rgba(59,130,246,.07);
+}
+.hri-pos { width: 1.5rem; text-align: center; font-size: 1rem; }
+.hri-crest { font-size: 1.2rem; }
+.hri-info { display: flex; flex-direction: column; flex: 1; }
+.hri-name { font-size: .9rem; font-weight: 600; }
+.hri-team { font-size: .75rem; }
+.hri-pts { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+
+/* ─── Ranking detallat (partits) ──────────────── */
+.hrd-matches {
+  padding: .5rem 1rem .5rem 3rem;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface2);
+  margin-top: -0.5rem;
+}
+.hrd-match-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .3rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .82rem;
+}
+.hrd-match-row:last-child { border-bottom: none; }
+.hrd-teams { flex: 1; color: var(--text2); }
+.hrd-pred { font-weight: 600; min-width: 2.5rem; text-align: center; }
+.hrd-result { color: var(--text); min-width: 2.5rem; text-align: center; }
+
+/* ─── Points badges: Hyper colors ─────────────── */
+.pts-grey {
+  background: rgba(100,116,139,.2);
+  color: var(--text3);
+}
+.pts-orange {
+  background: rgba(249,115,22,.18);
+  color: var(--orange);
+}
+
+/* ─── Hyper Club Screen ───────────────────────── */
+.hyper-club-card { margin-bottom: .75rem; }
+.hcc-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.hcc-badge {
+  width: 60px; height: 60px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+}
+.hcc-crest-emoji { font-size: 3rem; }
+.hcc-titles { display: flex; flex-direction: column; gap: .2rem; }
+.hcc-name { font-size: 1.1rem; font-weight: 700; }
+.hcc-details { margin-bottom: .75rem; }
+.hcc-row {
+  display: flex;
+  justify-content: space-between;
+  padding: .35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .88rem;
+}
+.hcc-row:last-child { border-bottom: none; }
+.hcc-label { color: var(--text2); font-size: .8rem; }
+.hcc-desc { font-size: .85rem; color: var(--text2); line-height: 1.5; margin-top: .5rem; }
+.hcc-squad-group { margin-bottom: .75rem; }
+.hcc-squad-pos { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text2); margin-bottom: .3rem; }
+.hcc-player {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .3rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .85rem;
+}
+.hcc-player:last-child { border-bottom: none; }
+.hcc-player-num { width: 1.5rem; text-align: center; color: var(--text3); font-size: .8rem; }
+.hcc-player-name { flex: 1; }
+.hcc-player-nat { font-size: .75rem; }
+
+/* ─── Hyper Profile Screen ────────────────────── */
+.hyper-profile { display: flex; flex-direction: column; gap: 1rem; }
+
+.hp-avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: .5rem;
+}
+.hp-avatar-circle {
+  position: relative;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  overflow: visible;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.hp-avatar-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.hp-avatar-initials {
+  font-size: 1.5rem; font-weight: 700;
+}
+.hp-crest-overlay {
+  position: absolute;
+  bottom: -4px; right: -8px;
+  font-size: 1.4rem;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.5));
+}
+.hp-team-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+.hp-team-crest { font-size: 2rem; }
+.hp-team-name { font-size: .95rem; font-weight: 600; }
+.hp-team-stadium { font-size: .8rem; }
+
+.hp-form { display: flex; flex-direction: column; gap: .75rem; }
+.hp-pwd-section summary { cursor: pointer; padding: .5rem 0; }
+.hp-pwd-section[open] summary { border-bottom: 1px solid var(--border); margin-bottom: .5rem; }
+
+/* ─── Hyper Predict Form ──────────────────────── */
+.hyper-predict-form { margin-bottom: .75rem; }
+.hpf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
+}
+.hpf-teams { font-size: .9rem; font-weight: 600; }
+.hpf-date { font-size: .78rem; }
+
+/* ─── Back button ────────────────────────────── */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: .9rem;
+  padding: .5rem 0;
+  margin-bottom: .5rem;
+}
+.btn-back:hover { color: var(--text); }

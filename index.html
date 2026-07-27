@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Gisceporra Mundial 2026</title>
+  <title>Gisceporra 2026</title>
   <link rel="stylesheet" href="./src/styles.css" />
 
   <!-- Supabase config (injected by CI/CD) -->
@@ -37,6 +37,112 @@
       </form>
     </div>
   </div>
+
+  <!-- ═══════════════ LEAGUE SELECTOR ═══════════════ -->
+  <div id="league-selector" class="hidden">
+    <div class="selector-card">
+      <div class="selector-logo">⚽</div>
+      <h1 class="selector-title">Gisceporra</h1>
+      <p class="selector-subtitle">Selecciona la porra:</p>
+      <div class="selector-buttons">
+        <button class="selector-btn hyper-sel-btn" id="sel-hyper-btn">
+          <span class="sel-icon">🏟️</span>
+          <div class="sel-text">
+            <span class="sel-label">Liga Hypermotion</span>
+            <span class="sel-sub">Temporada 2025-26</span>
+          </div>
+          <span class="sel-arrow">→</span>
+        </button>
+        <button class="selector-btn mundial-sel-btn" id="sel-mundial-btn">
+          <span class="sel-icon">🌍</span>
+          <div class="sel-text">
+            <span class="sel-label">Mundial 2026</span>
+            <span class="sel-sub">Consulta · Finalitzat</span>
+          </div>
+          <span class="sel-arrow">→</span>
+        </button>
+      </div>
+      <button id="selector-logout-btn" class="btn-link-muted">🚪 Tancar sessió</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ HYPER APP ═══════════════ -->
+  <div id="hyper-app" class="hidden">
+
+    <!-- Top Header -->
+    <header id="hyper-header">
+      <div class="header-left">
+        <div id="hyper-avatar" class="avatar hyper-avatar-wrap">
+          <div class="ha-initials">??</div>
+          <div class="ha-crest" id="hyper-crest-badge"></div>
+        </div>
+        <span id="hyper-user-label" class="user-label"></span>
+      </div>
+      <div class="header-title">⚽ Hypermotion</div>
+      <div class="header-right">
+        <button id="hyper-info-btn" class="btn-icon" title="Com funciona">?</button>
+        <button id="hyper-back-btn" class="btn-icon" title="Canviar porra" style="font-size:.8rem">🔄</button>
+        <button id="hyper-logout-btn" class="btn-icon" title="Sortir">🚪</button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="hyper-main">
+
+      <!-- ── SCREEN: Inici ── -->
+      <section id="hyper-screen-info" class="screen hidden">
+        <div id="hyper-info-content"><p class="muted">Carregant…</p></div>
+      </section>
+
+      <!-- ── SCREEN: Classificació ── -->
+      <section id="hyper-screen-ranking" class="screen hidden">
+        <div id="hyper-ranking-content"><p class="muted">Carregant classificació…</p></div>
+      </section>
+
+      <!-- ── SCREEN: El Meu Equip ── -->
+      <section id="hyper-screen-club" class="screen hidden">
+        <div id="hyper-club-content"><p class="muted">Carregant dades del club…</p></div>
+      </section>
+
+      <!-- ── SCREEN: Perfil ── -->
+      <section id="hyper-screen-profile" class="screen hidden">
+        <div id="hyper-profile-content"><p class="muted">Carregant perfil…</p></div>
+      </section>
+
+      <!-- ── SCREEN: Com funciona ── -->
+      <section id="hyper-screen-howto" class="screen hidden">
+        <div id="hyper-howto-content"></div>
+      </section>
+
+      <!-- ── SCREEN: Predicció (modal) ── -->
+      <section id="hyper-screen-predict" class="screen hidden">
+        <button class="btn-back" id="hyper-pred-back">← Tornar</button>
+        <div id="hyper-predict-content"></div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav id="hyper-nav">
+      <button class="nav-btn" data-hyper-nav="info">
+        <span class="nav-icon">📰</span>
+        <span class="nav-label">Inici</span>
+      </button>
+      <button class="nav-btn" data-hyper-nav="ranking">
+        <span class="nav-icon">🏆</span>
+        <span class="nav-label">Classificació</span>
+      </button>
+      <button class="nav-btn" data-hyper-nav="club">
+        <span class="nav-icon">🛡️</span>
+        <span class="nav-label">El Meu Equip</span>
+      </button>
+      <button class="nav-btn" data-hyper-nav="profile">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Perfil</span>
+      </button>
+    </nav>
+
+  </div><!-- /#hyper-app -->
 
   <!-- ═══════════════ APP ═══════════════ -->
   <div id="app" class="hidden">
@@ -120,5 +226,6 @@
   </div><!-- /#app -->
 
   <script type="module" src="./src/app.js"></script>
+  <script type="module" src="./src/hyper-app.js"></script>
 </body>
 </html>
