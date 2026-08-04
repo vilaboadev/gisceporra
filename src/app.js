@@ -53,8 +53,16 @@ async function login(username, password) {
 
   // Usuari test hardcoded — sempre accessible independentment de Supabase
   const testHash = await hashPwd('TST');
-  if (raw.toLowerCase() === 'TST' && hash === testHash) {
-    return { username: 'TST', display_name: 'Test User', tipus: 'normal', porra_mundial: true, porra_hyper: false };
+  if (raw.toUpperCase() === 'TST' && hash === testHash) {
+    return {
+      username: 'TST',
+      display_name: 'Test User',
+      tipus: 'normal',
+      porra_mundial: true,
+      porra_hyper: true,
+      hyper_team_id: '134259',
+      avatar_url: 'https://assets.laliga.com/assets/2019/06/07/xlarge/las-palmas.png'
+    };
   }
 
   if (supabase) {
