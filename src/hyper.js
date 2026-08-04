@@ -84,6 +84,12 @@ export async function fetchTeamPlayers(teamId) {
   }
 }
 
+export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2026-2027') {
+  const res = await fetch(`${TSDB_BASE}/lookuptable.php?l=${leagueId}&s=${leagueYear}`);
+  const data = await res.json();
+  return data.table ?? [];
+}
+
 // ── Helpers de format ──────────────────────────────────────────────────────
 
 /**
@@ -128,7 +134,7 @@ export function isPredictionLocked(dateStr, timeStr = '00:00:00') {
  * @param {string} teamName          Nom intern de l'equip assignat
  * @returns {string} HTML
  */
-export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByKey = new Map(), teamName = '') {
+export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByKey = new Map(), teamName = '', standings = []) {
   const teamInfo = getTeamInfo(teamName);
   const teamLabel = teamInfo?.displayName ?? teamName ?? 'Equip no assignat';
 
@@ -219,6 +225,45 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         ${pred ? `<div class="hrc-pred muted">Pronòstic: ${pred.pred_home}–${pred.pred_away}</div>` : ''}
       </div>`;
     }).join('');
+  }
+
+  // Classificació de la lliga
+  if (standings.length > 0) {
+    html += '<h3 class="section-h">Classificació</h3>';
+    html += `<div class="hyper-standings-card card">
+      <table class="hyper-standings-table" style="width:100%;border-collapse:collapse;font-size:0.85em;">
+        <thead>
+          <tr style="text-align:left;opacity:0.7;">
+            <th style="padding:4px 6px;">#</th>
+            <th style="padding:4px 6px;">Equip</th>
+            <th style="padding:4px 6px;text-align:center;">PJ</th>
+            <th style="padding:4px 6px;text-align:center;">G</th>
+            <th style="padding:4px 6px;text-align:center;">E</th>
+            <th style="padding:4px 6px;text-align:center;">P</th>
+            <th style="padding:4px 6px;text-align:center;">DG</th>
+            <th style="padding:4px 6px;text-align:center;">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${standings.map(row => {
+            const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
+            return `<tr style="${isMine ? 'background:rgba(255,255,255,0.08);font-weight:600;' : ''}border-top:1px solid rgba(255,255,255,0.08);">
+              <td style="padding:5px 6px;">${row.intRank}</td>
+              <td style="padding:5px 6px;display:flex;align-items:center;gap:6px;">
+                ${row.strTeamBadge ? `<img src="${row.strTeamBadge}" alt="" style="width:16px;height:16px;object-fit:contain;" />` : ''}
+                ${row.strTeam}
+              </td>
+              <td style="padding:5px 6px;text-align:center;">${row.intPlayed}</td>
+              <td style="padding:5px 6px;text-align:center;">${row.intWin}</td>
+              <td style="padding:5px 6px;text-align:center;">${row.intDraw}</td>
+              <td style="padding:5px 6px;text-align:center;">${row.intLoss}</td>
+              <td style="padding:5px 6px;text-align:center;">${row.intGoalDifference}</td>
+              <td style="padding:5px 6px;text-align:center;">${row.intPoints}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
   }
 
   return html;
