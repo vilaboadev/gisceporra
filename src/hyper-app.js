@@ -440,8 +440,10 @@ function updateHyperHeader() {
       img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;';
       initialsEl.textContent = '';
       initialsEl.appendChild(img);
+      initialsEl.style.background = 'var(--card-bg, #12141c)';
     } else {
       initialsEl.textContent = user.username.slice(0, 2);
+      initialsEl.style.background = '';
     }
   }
   if (crestEl) crestEl.textContent = crest;
