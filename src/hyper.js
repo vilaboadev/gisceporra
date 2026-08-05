@@ -75,7 +75,7 @@ export async function fetchTeamDetails(teamId) {
 export async function fetchTeamPlayers(teamId) {
   if (!teamId) return [];
   try {
-    const res = await fetch(`${TSDB_BASE}/lookupteamplayers.php?id=${teamId}`);
+    const res = await fetch(`${TSDB_BASE}/lookup_all_players.php?id=${teamId}`);
     if (!res.ok) return [];
     const json = await res.json();
     return json.player ?? [];
@@ -383,14 +383,28 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   const displayName = tsdbTeam?.strTeam ?? localInfo?.displayName ?? teamName ?? '–';
   const stadium = tsdbTeam?.strStadium ?? localInfo?.stadium ?? '–';
   const stadiumCapacity = tsdbTeam?.intStadiumCapacity ? Number(tsdbTeam.intStadiumCapacity).toLocaleString('ca') : '–';
-  const city = tsdbTeam?.strCity ?? localInfo?.city ?? '–';
+  const location = tsdbTeam?.strLocation ?? localInfo?.city ?? '–';
   const formed = tsdbTeam?.intFormedYear ?? '–';
   const country = tsdbTeam?.strCountry ?? 'Espanya';
   const description = tsdbTeam?.strDescriptionCA || tsdbTeam?.strDescriptionES || tsdbTeam?.strDescriptionEN || '';
-  const badgeUrl = tsdbTeam?.strTeamBadge ?? '';
+  const badgeUrl = tsdbTeam?.strBadge ?? '';
   const crest = localInfo?.crest ?? '⚽';
+  const accent = tsdbTeam?.strColour1 ?? null;
 
-  let html = `<div class="hyper-club-card card">
+  const leagues = [1, 2, 3, 4, 5, 6, 7]
+    .map(n => n === 1 ? tsdbTeam?.strLeague : tsdbTeam?.[`strLeague${n}`])
+    .filter(l => l && l.trim() !== '');
+
+  const normalizeUrl = (u) => (u ? (u.startsWith('http') ? u : `https://${u}`) : null);
+  const links = [
+    tsdbTeam?.strWebsite && { label: 'Web', icon: '🌐', url: normalizeUrl(tsdbTeam.strWebsite) },
+    tsdbTeam?.strTwitter && { label: 'X', icon: '🐦', url: normalizeUrl(tsdbTeam.strTwitter) },
+    tsdbTeam?.strInstagram && { label: 'Instagram', icon: '📷', url: normalizeUrl(tsdbTeam.strInstagram) },
+    tsdbTeam?.strFacebook && { label: 'Facebook', icon: '📘', url: normalizeUrl(tsdbTeam.strFacebook) },
+    tsdbTeam?.strYoutube && { label: 'YouTube', icon: '▶️', url: normalizeUrl(tsdbTeam.strYoutube) },
+  ].filter(Boolean);
+
+  let html = `<div class="hyper-club-card card"${accent ? ` style="border-left:4px solid ${accent}"` : ''}>
     <div class="hcc-header">
       ${badgeUrl
         ? `<img class="hcc-badge" src="${badgeUrl}" alt="${displayName}" />`
@@ -398,17 +412,29 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
       }
       <div class="hcc-titles">
         <h2 class="hcc-name">${displayName}</h2>
-        <p class="hcc-sub muted">${city} · ${country}</p>
+        <p class="hcc-sub muted">${location} · ${country}</p>
       </div>
     </div>
     <div class="hcc-details">
+      <div class="hcc-row"><span class="hcc-label">Competicions</span><span>${leagues.join(' · ') || '–'}</span></div>
       <div class="hcc-row"><span class="hcc-label">Estadi</span><span>${stadium}</span></div>
       <div class="hcc-row"><span class="hcc-label">Aforament</span><span>${stadiumCapacity}</span></div>
       <div class="hcc-row"><span class="hcc-label">Fundat</span><span>${formed}</span></div>
     </div>`;
 
   if (description) {
-    html += `<p class="hcc-desc">${description.slice(0, 300)}${description.length > 300 ? '…' : ''}</p>`;
+    html += `<p class="hcc-desc">${description.slice(0, 600)}${description.length > 600 ? '…' : ''}</p>`;
+  }
+
+  if (links.length > 0) {
+    html += `<div class="hcc-links" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+      ${links.map(l => `<a class="hcc-link" href="${l.url}" target="_blank" rel="noopener noreferrer"
+          style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;
+                 background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+                 color:inherit;text-decoration:none;font-size:0.85em;">
+          <span>${l.icon}</span><span>${l.label}</span>
+        </a>`).join('')}
+    </div>`;
   }
 
   html += `</div>`;
