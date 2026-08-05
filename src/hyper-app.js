@@ -10,6 +10,7 @@ import {
   fetchTeamLastMatches,
   fetchTeamDetails,
   fetchTeamPlayers,
+  fetchHyperStandings,
   hyperInfoHtml,
   hyperRankingDetailedHtml,
   hyperClubHtml,
@@ -94,9 +95,10 @@ async function loadHyperInfo() {
   el.innerHTML = '<p class="muted">Carregant partits…</p>';
 
   try {
-    const [nextMatches, lastMatches] = await Promise.all([
+    const [nextMatches, lastMatches, standings] = await Promise.all([
       fetchTeamNextMatches(teamId).catch(() => []),
       fetchTeamLastMatches(teamId).catch(() => []),
+      fetchHyperStandings('4400').catch(() => []),
     ]);
 
     // Carregar prediccions de l'usuari
@@ -107,7 +109,7 @@ async function loadHyperInfo() {
       hyperPredCache = predMap;
     }
 
-    el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, user.hyper_team_id ?? '');
+    el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, user.hyper_team_id ?? '', standings);
 
     // Connectar botons "Predir resultat"
     el.querySelectorAll('.hyper-predict-btn').forEach(btn => {
