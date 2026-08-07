@@ -874,12 +874,24 @@ body {
 .hmc-teams {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
   gap: .75rem;
   margin-bottom: .5rem;
 }
-.hmc-team { font-size: .9rem; font-weight: 500; flex: 1; }
+.hmc-team {
+  font-size: .9rem;
+  font-weight: 500;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .hmc-team.hmc-mine { color: var(--accent); font-weight: 700; }
-.hmc-vs { color: var(--text3); font-size: .8rem; }
+.hmc-team:first-child { text-align: right; }
+.hmc-team:last-child { text-align: left; }
+.hmc-vs { color: var(--text3); font-size: .8rem; flex: 0 0 auto; }
 
 .hyper-badge-ok {
   display: inline-flex;

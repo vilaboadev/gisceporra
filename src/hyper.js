@@ -6,7 +6,7 @@
  */
 
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
-import { getTeamInfo } from './hyper-teams.js';
+import { getTeamInfo, HYPER_TEAMS } from './hyper-teams.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,8 +25,125 @@ function safeSrc(url) {
   return /^https?:\/\//.test(url ?? '') ? url : '';
 }
 
+const CACHE_KEY = 'tsdb_league_next_matches';
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hores
+
 // ── TheSportDB API ─────────────────────────────────────────────────────────
 const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
+
+// Petita pausa per no cremar el rate limit de la clau gratuïta (~30 req/min)
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Serialitza el Map a un objecte pla per poder-lo desar a localStorage.
+ */
+function serializeCache(eventsByTeam) {
+  return {
+    timestamp: Date.now(),
+    data: Object.fromEntries(eventsByTeam),
+  };
+}
+
+function deserializeCache(raw) {
+  return new Map(Object.entries(raw.data));
+}
+
+/**
+ * Retorna el cache de propers partits de la lliga, refrescant-lo
+ * automàticament si ha caducat o no existeix.
+ */
+export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } = {}) {
+  if (!forceRefresh) {
+    const cachedRaw = localStorage.getItem(CACHE_KEY);
+    if (cachedRaw) {
+      try {
+        const parsed = JSON.parse(cachedRaw);
+        const age = Date.now() - parsed.timestamp;
+        if (age < CACHE_TTL_MS) {
+          return deserializeCache(parsed);
+        }
+      } catch (e) {
+        console.warn('Cache de TheSportsDB corrupte, es regenera', e);
+      }
+    }
+  }
+
+  // Cache absent, caducat o forçat: el regenerem
+  const freshData = await fetchAllUpcomingLeagueMatches(allTeamIds);
+  localStorage.setItem(CACHE_KEY, JSON.stringify(serializeCache(freshData)));
+  return freshData;
+}
+
+/**
+ * Obté el proper partit "local" de cada equip de la lliga (allTeamIds),
+ * i en dedueix la llista completa de propers partits sense repetir crides
+ * quan el partit ja ha aparegut com a proper partit d'un altre equip.
+ *
+ * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
+ * @param {number} delayMs - pausa entre crides per no saturar el rate limit
+ * @returns {Promise<Map<string, object>>} Map<idEvent, event>
+ */
+export async function fetchAllUpcomingLeagueMatches(allTeamIds, delayMs = 250) {
+  const eventsByTeam = new Map();     // idTeam -> event (proper partit com a local)
+  const knownEventIds = new Set();    // idEvent ja capturats (com a local o com a visitant)
+  const pendingTeamIds = new Set(allTeamIds.map(String));
+
+  for (const teamId of allTeamIds) {
+    const key = String(teamId);
+
+    // Si aquest equip ja apareix com a visitant en un partit que ja tenim,
+    // ens estalviem la crida.
+    if (!pendingTeamIds.has(key)) continue;
+
+    const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
+    if (!res.ok) {
+      console.warn(`TheSportDB error ${res.status} per a l'equip ${teamId}`);
+      pendingTeamIds.delete(key);
+      continue;
+    }
+    const json = await res.json();
+    const events = json.events ?? [];
+
+    pendingTeamIds.delete(key);
+
+    for (const ev of events) {
+      if (knownEventIds.has(ev.idEvent)) continue;
+      knownEventIds.add(ev.idEvent);
+      eventsByTeam.set(String(ev.idHomeTeam), ev);
+
+      // El rival d'aquest partit ja té el seu "proper partit" resolt
+      // (és aquest mateix), així que el traiem de la cua pendent.
+      if (ev.idAwayTeam) {
+        pendingTeamIds.delete(String(ev.idAwayTeam));
+      }
+    }
+
+    await sleep(delayMs);
+  }
+
+  return eventsByTeam; // idTeam (local) -> event
+}
+
+/**
+ * Retorna els propers partits d'un equip concret a partir del cache
+ * generat per fetchAllUpcomingLeagueMatches.
+ */
+export function getNextMatchesForTeam(eventsByTeam, teamId) {
+  const key = String(teamId);
+  const asHome = eventsByTeam.get(key);
+  if (asHome) return [asHome];
+
+  // L'equip no té partit com a local en el cache: busquem si apareix
+  // com a visitant en algun dels events capturats.
+  for (const ev of eventsByTeam.values()) {
+    if (String(ev.idAwayTeam) === key) return [ev];
+  }
+  return [];
+}
+
+const ALL_TEAM_IDS = Object.values(HYPER_TEAMS).map(team => team.id);
 
 /**
  * Obté els pròxims partits d'un equip (màx. 15 de theSportDB free tier).
@@ -35,10 +152,9 @@ const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
  */
 export async function fetchTeamNextMatches(teamId) {
   if (!teamId) return [];
-  const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
-  if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
-  const json = await res.json();
-  return json.events ?? [];
+  // Cachejat, per exemple cada 6-12h
+  const leagueEventsCache = await getLeagueEventsCache(ALL_TEAM_IDS);
+  return getNextMatchesForTeam(leagueEventsCache, teamId);
 }
 
 /**
@@ -126,6 +242,24 @@ export function isPredictionLocked(dateStr, timeStr = '00:00:00') {
 
 // ── Renderitzat: Pantalla d'Inici ──────────────────────────────────────────
 
+function getMatchStatusBadge(locked, pred) {
+  if (locked) {
+    return pred
+      ? `<span class="hyper-pred-locked">🔒 ${pred.pred_home}–${pred.pred_away}</span>`
+      : `<span class="hyper-badge-warn">⚠️ Sense pronòstic</span>`;
+  }
+  return pred
+    ? `<span class="hyper-badge-ok">✅ Pronòstic fet: ${pred.pred_home}–${pred.pred_away}</span>`
+    : `<span class="hyper-badge-warn">⚠️ Pronòstic pendent</span>`;
+}
+
+function getPredictButton(m, key, locked, pred) {
+  if (locked) return '';
+  const label = pred ? 'Edita pronòstic' : 'Predir resultat';
+  const extraClass = pred ? ' btn-edit' : '';
+  return `<button class="btn-primary${extraClass} hyper-predict-btn" data-event="${key}" data-home="${m.strHomeTeam}" data-away="${m.strAwayTeam}" data-date="${m.dateEvent}" data-time="${m.strTime ?? ''}">${label}</button>`;
+}
+
 /**
  * Genera el HTML de la pantalla d'inici de Hypermotion.
  * @param {Array}  nextMatches       Pròxims partits del teu equip (theSportDB)
@@ -151,7 +285,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
 
   // Pròxims partits (màx. 4)
   const upcomingRaw = nextMatches
-    .filter(m => m.strDate)
+    .filter(m => m.dateEvent)
     .slice(0, 4);
 
   if (upcomingRaw.length > 0) {
@@ -159,26 +293,12 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
     html += upcomingRaw.map(m => {
       const key = m.idEvent;
       const pred = predictionsByKey.get(String(key));
-      const locked = isPredictionLocked(m.strDate, m.strTime);
-      const dateLabel = formatHyperMatchDate(m.strDate, m.strTime);
+      const locked = isPredictionLocked(m.dateEvent, m.strTime);
+      const dateLabel = formatHyperMatchDate(m.dateEvent, m.strTime);
       const isHome = m.idHomeTeam === (teamInfo?.id ?? teamName);
       const opponent = isHome ? m.strAwayTeam : m.strHomeTeam;
 
-      let statusBadge = '';
-      if (locked) {
-        // Finestra tancada — si tenim la seva predicció, la mostrem
-        if (pred) {
-          statusBadge = `<span class="hyper-pred-locked">🔒 ${pred.pred_home}–${pred.pred_away}</span>`;
-        } else {
-          statusBadge = `<span class="hyper-badge-warn">⚠️ Sense pronòstic</span>`;
-        }
-      } else {
-        if (pred) {
-          statusBadge = `<span class="hyper-badge-ok">✅ Pronòstic fet: ${pred.pred_home}–${pred.pred_away}</span>`;
-        } else {
-          statusBadge = `<span class="hyper-badge-warn">⚠️ Pronòstic pendent</span>`;
-        }
-      }
+      const statusBadge = getMatchStatusBadge(locked, pred);
 
       return `<div class="hyper-match-card card ${locked ? 'locked' : ''}">
         <div class="hmc-header">
@@ -190,8 +310,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
           <span class="hmc-vs">vs</span>
           <span class="hmc-team ${!isHome ? 'hmc-mine' : ''}">${m.strAwayTeam}</span>
         </div>
-        ${!locked && !pred ? `<button class="btn-primary hyper-predict-btn" data-event="${key}" data-home="${m.strHomeTeam}" data-away="${m.strAwayTeam}" data-date="${m.strDate}" data-time="${m.strTime ?? ''}">Predir resultat</button>` : ''}
-        ${!locked && pred ? `<button class="btn-primary btn-edit hyper-predict-btn" data-event="${key}" data-home="${m.strHomeTeam}" data-away="${m.strAwayTeam}" data-date="${m.strDate}" data-time="${m.strTime ?? ''}">Edita pronòstic</button>` : ''}
+        ${getPredictButton(m, key, locked, pred)}
       </div>`;
     }).join('');
   } else {
