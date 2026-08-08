@@ -77,24 +77,56 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
 }
 
 /**
- * Obté el proper partit "local" de cada equip de la lliga (allTeamIds),
- * i en dedueix la llista completa de propers partits sense repetir crides
- * quan el partit ja ha aparegut com a proper partit d'un altre equip.
+ * Retorna l'inici (dilluns 00:00) i el final (diumenge 23:59:59) de la
+ * setmana actual, en base a la data local.
+ */
+function getCurrentWeekRange(now = new Date()) {
+  const day = now.getDay(); // 0 = diumenge, 1 = dilluns, ...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  return { start: monday, end: sunday };
+}
+
+/**
+ * Comprova si un event (segons ev.strTimestamp) cau dins de la setmana actual.
+ */
+function isThisWeek(ev, weekRange) {
+  if (!ev.strTimestamp) return false;
+  const evDate = new Date(ev.strTimestamp);
+  return evDate >= weekRange.start && evDate <= weekRange.end;
+}
+
+/**
+ * Obté el proper partit d'aquesta setmana de cada equip de la lliga
+ * (allTeamIds), sense repetir crides quan el partit ja ha aparegut com
+ * a proper partit d'un altre equip.
+ *
+ * Nomes es retorna entrada per als equips el proper partit dels quals
+ * cau dins de la setmana actual (dilluns-diumenge). Si el proper partit
+ * d'un equip és més endavant, no apareix al resultat.
  *
  * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
  * @param {number} delayMs - pausa entre crides per no saturar el rate limit
- * @returns {Promise<Map<string, object>>} Map<idEvent, event>
+ * @returns {Promise<Map<string, object>>} Map<idTeam, event>
  */
 export async function fetchAllUpcomingLeagueMatches(allTeamIds, delayMs = 250) {
-  const eventsByTeam = new Map();     // idTeam -> event (proper partit com a local)
-  const knownEventIds = new Set();    // idEvent ja capturats (com a local o com a visitant)
+  const eventsByTeam = new Map();     // idTeam -> event (proper partit, local o visitant)
   const pendingTeamIds = new Set(allTeamIds.map(String));
+  const weekRange = getCurrentWeekRange();
 
   for (const teamId of allTeamIds) {
     const key = String(teamId);
 
-    // Si aquest equip ja apareix com a visitant en un partit que ja tenim,
-    // ens estalviem la crida.
+    // Si aquest equip ja té resolt el seu proper partit (perquè va sortir
+    // com a rival d'un altre equip ja consultat), ens estalviem la crida.
     if (!pendingTeamIds.has(key)) continue;
 
     const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
@@ -108,22 +140,45 @@ export async function fetchAllUpcomingLeagueMatches(allTeamIds, delayMs = 250) {
 
     pendingTeamIds.delete(key);
 
-    for (const ev of events) {
-      if (knownEventIds.has(ev.idEvent)) continue;
-      knownEventIds.add(ev.idEvent);
-      eventsByTeam.set(String(ev.idHomeTeam), ev);
+    if (events.length === 0) continue;
 
-      // El rival d'aquest partit ja té el seu "proper partit" resolt
-      // (és aquest mateix), així que el traiem de la cua pendent.
-      if (ev.idAwayTeam) {
-        pendingTeamIds.delete(String(ev.idAwayTeam));
+    const ev = events[0]; // proper partit d'aquest equip (local o visitant)
+
+    // Només ens interessa si es juga aquesta setmana.
+    if (isThisWeek(ev, weekRange)) {
+      eventsByTeam.set(key, ev);
+    }
+
+    // Si el rival d'aquest partit també és de la lliga i encara està
+    // pendent, aquest mateix partit és també el seu proper partit,
+    // així que ens estalviem consultar-lo per separat.
+    const homeId = String(ev.idHomeTeam);
+    const awayId = String(ev.idAwayTeam);
+    const rivalId = key === homeId ? awayId : homeId;
+
+    if (pendingTeamIds.has(rivalId)) {
+      pendingTeamIds.delete(rivalId);
+      if (isThisWeek(ev, weekRange)) {
+        eventsByTeam.set(rivalId, ev);
       }
     }
 
     await sleep(delayMs);
   }
 
-  return eventsByTeam; // idTeam (local) -> event
+  return eventsByTeam; // idTeam -> proper partit d'aquesta setmana (si n'hi ha)
+}
+
+/**
+ * A partir del Map idTeam -> event, retorna la llista d'events únics
+ * (útil per pintar el calendari de la jornada sense partits repetits).
+ */
+export function dedupeEvents(eventsByTeam) {
+  const seen = new Map(); // idEvent -> event
+  for (const ev of eventsByTeam.values()) {
+    seen.set(ev.idEvent, ev);
+  }
+  return [...seen.values()];
 }
 
 /**
