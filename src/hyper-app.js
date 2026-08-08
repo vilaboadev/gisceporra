@@ -52,6 +52,8 @@ let hyperTeamCache = null;     // dades theSportDB de l'equip
 let hyperPlayersCache = null;
 let hyperPredCache = null;     // Map<match_key, prediction>
 let hyperResultsCache = null;  // Array de resultats (hyper_results)
+let hyperInfoCache = null;     // Cache per la pantalla d'inici
+let hyperRankingCache = null;  // Cache per la classificació
 
 // ── Accés a estat compartit (app.js) ──────────────────────────────────────
 function getUser() { return window.__app?.currentUser ?? null; }
@@ -78,7 +80,7 @@ function hyperNavigate(screen) {
 window.hyperNavigate = hyperNavigate;
 
 // ── Pantalla: Inici ────────────────────────────────────────────────────────
-async function loadHyperInfo() {
+async function loadHyperInfo(force = false) {
   const el = $('hyper-info-content');
   if (!el) return;
 
@@ -92,41 +94,66 @@ async function loadHyperInfo() {
     return;
   }
 
-  el.innerHTML = '<p class="muted">Carregant partits…</p>';
+  const now = Date.now();
+
+  // Si tenim cache vàlid de la pantalla d'inici (< 2 minuts) del mateix equip, renderitzem a l'instant
+  if (!force && hyperInfoCache && hyperInfoCache.teamId === teamId && (now - hyperInfoCache.timestamp < 2 * 60 * 1000)) {
+    renderHyperInfo(el, hyperInfoCache.nextMatches, hyperInfoCache.lastMatches, hyperInfoCache.predMap, teamId, hyperInfoCache.standings);
+    return;
+  }
+
+  if (!hyperInfoCache || force) {
+    el.innerHTML = '<p class="muted">Carregant partits…</p>';
+  }
 
   try {
-    const [nextMatches, lastMatches, standings] = await Promise.all([
+    const [nextMatches, lastMatches, standings, predMap] = await Promise.all([
       fetchTeamNextMatches(teamId).catch(() => []),
       fetchTeamLastMatches(teamId).catch(() => []),
       fetchHyperStandings('4400').catch(() => []),
+      (async () => {
+        if (hyperPredCache && !force) return hyperPredCache;
+        if (db && user) {
+          const { data } = await db.from('hyper_predictions').select('*').eq('username', user.username);
+          const map = new Map((data ?? []).map(p => [String(p.match_key), p]));
+          hyperPredCache = map;
+          return map;
+        }
+        return hyperPredCache ?? new Map();
+      })(),
     ]);
 
-    // Carregar prediccions de l'usuari
-    let predMap = new Map();
-    if (db && user) {
-      const { data } = await db.from('hyper_predictions').select('*').eq('username', user.username);
-      predMap = new Map((data ?? []).map(p => [String(p.match_key), p]));
-      hyperPredCache = predMap;
-    }
+    hyperInfoCache = {
+      teamId,
+      nextMatches,
+      lastMatches,
+      standings,
+      predMap,
+      timestamp: Date.now(),
+    };
 
-    el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, user.hyper_team_id ?? '', standings);
-
-    // Connectar botons "Predir resultat"
-    el.querySelectorAll('.hyper-predict-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const match = {
-          idEvent: btn.dataset.event,
-          strHomeTeam: btn.dataset.home,
-          strAwayTeam: btn.dataset.away,
-          strDate: btn.dataset.date,
-          strTime: btn.dataset.time,
-        };
-        openPredictForm(match);
-      });
-    });
+    renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings);
   } catch (err) {
     showError(el, err.message);
   }
+}
+
+function renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings) {
+  el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, teamId, standings);
+
+  // Connectar botons "Predir resultat"
+  el.querySelectorAll('.hyper-predict-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const match = {
+        idEvent: btn.dataset.event,
+        strHomeTeam: btn.dataset.home,
+        strAwayTeam: btn.dataset.away,
+        strDate: btn.dataset.date,
+        strTime: btn.dataset.time,
+      };
+      openPredictForm(match);
+    });
+  });
 }
 
 // ── Pantalla: Formulari de predicció ──────────────────────────────────────
@@ -193,6 +220,10 @@ async function saveHyperPrediction(form) {
     // Actualitzar caché local
     if (!hyperPredCache) hyperPredCache = new Map();
     hyperPredCache.set(String(matchKey), prediction);
+    hyperRankingCache = null; // Invalidate ranking cache on new prediction
+    if (hyperInfoCache) {
+      hyperInfoCache.predMap.set(String(matchKey), prediction);
+    }
 
     if (statusEl) { statusEl.textContent = '✅ Pronòstic guardat!'; statusEl.className = 'bet-status status-msg ok'; }
     if (btn) { btn.textContent = '✓ Guardat'; btn.classList.add('btn-done'); }
@@ -207,14 +238,24 @@ async function saveHyperPrediction(form) {
 }
 
 // ── Pantalla: Classificació ────────────────────────────────────────────────
-async function loadHyperRanking() {
+async function loadHyperRanking(force = false) {
   const el = $('hyper-ranking-content');
   if (!el) return;
 
   const db = getDb();
   const user = getUser();
 
-  el.innerHTML = '<p class="muted">Calculant classificació…</p>';
+  const now = Date.now();
+
+  // Si tenim la classificació en cache (< 2 minuts), renderitzem immediatament
+  if (!force && hyperRankingCache && (now - hyperRankingCache.timestamp < 2 * 60 * 1000)) {
+    el.innerHTML = hyperRankingDetailedHtml(hyperRankingCache.entries, user?.username ?? '', now);
+    return;
+  }
+
+  if (!hyperRankingCache || force) {
+    el.innerHTML = '<p class="muted">Calculant classificació…</p>';
+  }
 
   try {
     if (!db) {
@@ -247,6 +288,11 @@ async function loadHyperRanking() {
         results,
       };
     });
+
+    hyperRankingCache = {
+      entries,
+      timestamp: Date.now(),
+    };
 
     el.innerHTML = hyperRankingDetailedHtml(entries, user?.username ?? '', nowMs);
 
@@ -457,7 +503,14 @@ document.querySelectorAll('#hyper-nav .nav-btn').forEach(btn => {
   btn.addEventListener('click', () => hyperNavigate(btn.dataset.hyperNav));
 });
 
-$('hyper-logout-btn')?.addEventListener('click', () => window.__app?.showLogin());
+$('hyper-logout-btn')?.addEventListener('click', () => {
+  hyperInfoCache = null;
+  hyperRankingCache = null;
+  hyperPredCache = null;
+  hyperTeamCache = null;
+  hyperPlayersCache = null;
+  window.__app?.showLogin();
+});
 $('hyper-back-btn')?.addEventListener('click', () => {
   const user = getUser();
   const hasMundial = user?.porra_mundial !== false;
