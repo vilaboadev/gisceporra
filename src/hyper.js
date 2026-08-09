@@ -398,7 +398,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
     <div class="htb-crest">${teamInfo?.crest ?? '⚽'}</div>
     <div class="htb-info">
       <div class="htb-name">${teamLabel}</div>
-      <div class="htb-sub muted">El teu equip · Liga Hypermotion 2025-26</div>
+      <div class="htb-sub muted">El teu equip · Liga Hypermotion</div>
     </div>
   </div>`;
 
@@ -409,6 +409,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
 
   if (upcomingRaw.length > 0) {
     html += '<h3 class="section-h">Pròxims partits</h3>';
+    html += '<div class="hyper-matches-grid">';
     html += upcomingRaw.map(m => {
       const key = m.idEvent;
       const matchDate = m.dateEvent || m.strDate || '';
@@ -423,9 +424,13 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
 
       return `<div class="hyper-match-card card ${locked || !isHypermotion ? 'locked' : ''}">
         <div class="hmc-header">
-          <span class="hmc-date muted">${dateLabel}</span>
-          <span class="hmc-league muted">${escHtml(m.strLeague ?? '')}</span>
-          <span class="hmc-status">${statusBadge}</span>
+          <div class="hmc-meta-row">
+            <span class="hmc-date muted">${dateLabel}</span>
+            <span class="hmc-league muted">${escHtml(m.strLeague ?? '')}</span>
+          </div>
+          <div class="hmc-status-row">
+            ${statusBadge}
+          </div>
         </div>
         <div class="hmc-teams">
           <span class="hmc-team ${isHome ? 'hmc-mine' : ''}">${escHtml(m.strHomeTeam)}</span>
@@ -435,6 +440,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         ${predictBtn}
       </div>`;
     }).join('');
+    html += '</div>';
   } else {
     html += '<p class="muted">No hi ha pròxims partits disponibles.</p>';
   }
@@ -443,6 +449,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
   const finishedRaw = lastMatches.filter(m => m.intHomeScore != null).slice(0, 5);
   if (finishedRaw.length > 0) {
     html += '<h3 class="section-h">Últims resultats</h3>';
+    html += '<div class="hyper-results-grid">';
     html += finishedRaw.map(m => {
       const key = m.idEvent;
       const pred = predictionsByKey.get(String(key));
@@ -466,13 +473,14 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         ${pred ? `<div class="hrc-pred muted">Pronòstic: ${pred.pred_home}–${pred.pred_away}</div>` : ''}
       </div>`;
     }).join('');
+    html += '</div>';
   }
 
   // Classificació de la lliga
   if (standings.length > 0) {
     html += '<h3 class="section-h">Classificació</h3>';
-    html += `<div class="hyper-standings-card card">
-      <table class="hyper-standings-table" style="width:100%;border-collapse:collapse;font-size:0.85em;">
+    html += `<div class="hyper-standings-card card" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table class="hyper-standings-table" style="width:100%;border-collapse:collapse;font-size:0.85em;white-space:nowrap;">
         <thead>
           <tr style="text-align:left;opacity:0.7;">
             <th style="padding:4px 6px;">#</th>

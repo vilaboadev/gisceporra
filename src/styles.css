@@ -797,11 +797,13 @@ body {
 .btn-link-muted:hover { color: var(--text2); }
 
 /* ─── Hyper App Layout ────────────────────────── */
+/* ─── Hypermotion Layout & Container Centering ────── */
 #hyper-app {
   display: flex;
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
+  background: var(--bg);
 }
 
 #hyper-header {
@@ -822,6 +824,13 @@ body {
   padding-bottom: calc(var(--nav-h) + .5rem);
 }
 
+#hyper-main .screen {
+  max-width: 768px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
 #hyper-nav {
   height: var(--nav-h);
   background: var(--surface);
@@ -830,6 +839,44 @@ body {
   flex-shrink: 0;
   z-index: 10;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  justify-content: space-around;
+}
+
+@media (min-width: 768px) {
+  #hyper-header {
+    padding: 0 2rem;
+  }
+  #hyper-nav {
+    max-width: 768px;
+    margin: 0 auto;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}
+
+@media (max-width: 580px) {
+  #hyper-header #hyper-user-label {
+    display: none !important;
+  }
+  #hyper-header .header-title {
+    font-size: .95rem;
+    font-weight: 700;
+  }
+  #hyper-header .header-left {
+    gap: .4rem;
+  }
+  #hyper-header .header-right {
+    gap: .25rem;
+  }
+  #hyper-header .header-right .btn-icon {
+    width: 30px;
+    height: 30px;
+    font-size: .85rem;
+  }
+  .hmc-status-row {
+    justify-content: center;
+  }
 }
 
 /* ─── Hyper Avatar (amb crest sobreimprès) ──────── */
@@ -861,38 +908,85 @@ body {
   gap: 1rem;
   margin-bottom: .5rem;
 }
-.htb-crest { font-size: 2rem; }
-.htb-name { font-size: 1rem; font-weight: 700; }
+.htb-crest { font-size: 2rem; flex-shrink: 0; }
+.htb-info {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.htb-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.htb-sub {
+  font-size: .78rem;
+  color: var(--text2);
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.hyper-matches-grid,
+.hyper-results-grid {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+@media (min-width: 600px) {
+  .hyper-matches-grid,
+  .hyper-results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+  .hyper-matches-grid .hyper-match-card,
+  .hyper-results-grid .hyper-result-card {
+    margin-bottom: 0;
+  }
+}
 
 .hyper-match-card { margin-bottom: .75rem; }
 .hyper-match-card.locked { opacity: .8; }
 
 .hmc-header {
   display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  margin-bottom: .6rem;
+}
+.hmc-meta-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: .5rem;
-  gap: .4rem;
+  gap: .5rem;
 }
 .hmc-date {
   font-size: .8rem;
-  flex: 1 1 0;
-  text-align: left;
+  color: var(--text2);
+  font-weight: 500;
+  white-space: nowrap;
 }
 .hmc-league {
   font-size: .75rem;
   font-weight: 600;
-  text-align: center;
-  flex: 1 1 0;
+  color: var(--text3);
+  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 50%;
 }
-.hmc-status {
-  flex: 1 1 0;
+.hmc-status-row {
   display: flex;
-  justify-content: flex-end;
-  text-align: right;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  margin: .2rem 0;
 }
 .hmc-teams {
   display: flex;
@@ -927,6 +1021,7 @@ body {
   font-size: .75rem;
   padding: .15rem .5rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .hyper-badge-warn {
@@ -940,6 +1035,7 @@ body {
   font-size: .75rem;
   padding: .15rem .5rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .hyper-pred-locked {
@@ -949,6 +1045,19 @@ body {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: .15rem .5rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .hmc-teams {
+    gap: .35rem;
+  }
+  .hmc-team {
+    font-size: .82rem;
+  }
+  .hmc-date {
+    font-size: .75rem;
+  }
 }
 
 /* ─── Hyper Result Cards ──────────────────────── */
@@ -965,9 +1074,16 @@ body {
   justify-content: space-between;
   gap: .5rem;
 }
-.hrc-team { font-size: .85rem; flex: 1; }
+.hrc-team {
+  font-size: .85rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .hrc-team.right { text-align: right; }
-.hrc-score { font-size: 1rem; font-weight: 700; min-width: 3.5rem; text-align: center; }
+.hrc-score { font-size: 1rem; font-weight: 700; min-width: 3.5rem; text-align: center; flex-shrink: 0; }
 .hrc-pred { font-size: .78rem; margin-top: .25rem; }
 
 /* ─── Hyper Ranking ───────────────────────────── */
@@ -998,16 +1114,16 @@ body {
   border-color: var(--accent);
   background: rgba(59,130,246,.07);
 }
-.hri-pos { width: 1.5rem; text-align: center; font-size: 1rem; }
-.hri-crest { font-size: 1.2rem; }
-.hri-info { display: flex; flex-direction: column; flex: 1; }
-.hri-name { font-size: .9rem; font-weight: 600; }
-.hri-team { font-size: .75rem; }
-.hri-pts { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+.hri-pos { width: 1.5rem; text-align: center; font-size: 1rem; flex-shrink: 0; }
+.hri-crest { font-size: 1.2rem; flex-shrink: 0; }
+.hri-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.hri-name { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hri-team { font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hri-pts { font-weight: 700; font-size: 1rem; white-space: nowrap; flex-shrink: 0; }
 
 /* ─── Ranking detallat (partits) ──────────────── */
 .hrd-matches {
-  padding: .5rem 1rem .5rem 3rem;
+  padding: .5rem 1rem .5rem 2.5rem;
   border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 var(--radius) var(--radius);
@@ -1018,14 +1134,31 @@ body {
   display: flex;
   align-items: center;
   gap: .5rem;
-  padding: .3rem 0;
+  padding: .35rem 0;
   border-bottom: 1px solid var(--border);
   font-size: .82rem;
 }
 .hrd-match-row:last-child { border-bottom: none; }
-.hrd-teams { flex: 1; color: var(--text2); }
-.hrd-pred { font-weight: 600; min-width: 2.5rem; text-align: center; }
-.hrd-result { color: var(--text); min-width: 2.5rem; text-align: center; }
+.hrd-teams { flex: 1; color: var(--text2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hrd-pred { font-weight: 600; min-width: 2.5rem; text-align: center; flex-shrink: 0; }
+.hrd-result { color: var(--text); min-width: 2.5rem; text-align: center; flex-shrink: 0; }
+
+@media (max-width: 400px) {
+  .hyper-rank-item {
+    padding: .65rem .75rem;
+    gap: .5rem;
+  }
+  .hrd-matches {
+    padding: .5rem .75rem;
+  }
+  .hrd-match-row {
+    gap: .3rem;
+    font-size: .78rem;
+  }
+  .hrd-pred, .hrd-result {
+    min-width: 2rem;
+  }
+}
 
 /* ─── Points badges: Hyper colors ─────────────── */
 .pts-grey {
@@ -1050,10 +1183,11 @@ body {
   object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--surface2);
+  flex-shrink: 0;
 }
-.hcc-crest-emoji { font-size: 3rem; }
-.hcc-titles { display: flex; flex-direction: column; gap: .2rem; }
-.hcc-name { font-size: 1.1rem; font-weight: 700; }
+.hcc-crest-emoji { font-size: 3rem; flex-shrink: 0; }
+.hcc-titles { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.hcc-name { font-size: 1.1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hcc-details { margin-bottom: .75rem; }
 .hcc-row {
   display: flex;
@@ -1071,14 +1205,31 @@ body {
   display: flex;
   align-items: center;
   gap: .6rem;
-  padding: .3rem 0;
+  padding: .35rem 0;
   border-bottom: 1px solid var(--border);
   font-size: .85rem;
 }
 .hcc-player:last-child { border-bottom: none; }
-.hcc-player-num { width: 1.5rem; text-align: center; color: var(--text3); font-size: .8rem; }
-.hcc-player-name { flex: 1; }
-.hcc-player-nat { font-size: .75rem; }
+.hcc-player-num { width: 1.5rem; text-align: center; color: var(--text3); font-size: .8rem; flex-shrink: 0; }
+.hcc-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hcc-player-nat { font-size: .75rem; flex-shrink: 0; }
+
+@media (min-width: 580px) {
+  .hcc-details {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0 1.25rem;
+  }
+  .hcc-squad-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .25rem 1rem;
+    align-items: center;
+  }
+  .hcc-squad-pos {
+    grid-column: 1 / -1;
+  }
+}
 
 /* ─── Hyper Profile Screen ────────────────────── */
 .hyper-profile { display: flex; flex-direction: column; gap: 1rem; }
@@ -1117,7 +1268,7 @@ body {
   gap: 1rem;
   margin-bottom: 0;
 }
-.hp-team-crest { font-size: 2rem; }
+.hp-team-crest { font-size: 2rem; flex-shrink: 0; }
 .hp-team-name { font-size: .95rem; font-weight: 600; }
 .hp-team-stadium { font-size: .8rem; }
 
@@ -1137,6 +1288,27 @@ body {
 }
 .hpf-teams { font-size: .9rem; font-weight: 600; }
 .hpf-date { font-size: .78rem; }
+
+@media (max-width: 400px) {
+  .hyper-predict-form .bet-teams {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .5rem;
+  }
+  .hyper-predict-form .bet-team-name {
+    flex: 1 1 42%;
+    text-align: center;
+  }
+  .hyper-predict-form .bet-team-name.right {
+    text-align: center;
+  }
+  .hyper-predict-form .bet-score-inputs {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: .3rem;
+  }
+}
 
 /* ─── Back button ────────────────────────────── */
 .btn-back {
