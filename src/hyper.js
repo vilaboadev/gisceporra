@@ -563,6 +563,11 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
 
   let html = '';
 
+  html += `<div class="hyper-ranking-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+    <span class="section-h" style="margin:0;">Classificació</span>
+    <button class="btn-link-muted hyper-toggle-all-btn" onclick="toggleAllHyperMatches()">👁️ Obrir / Tancar tots</button>
+  </div>`;
+
   sorted.forEach((entry, i) => {
     const isMe = entry.username === currentUsername;
     const teamInfo = getTeamInfo(entry.teamName);
@@ -576,7 +581,7 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       return locked || result?.home_goals != null;
     });
 
-    const matchRows = visibleMatches.map(pred => {
+    const matchRowsHtml = visibleMatches.map(pred => {
       const result = (entry.results ?? []).find(r => r.match_key === pred.match_key);
       const pts = result?.home_goals != null
         ? calculateHyperMatchPoints(pred, result)
@@ -594,7 +599,10 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       </div>`;
     }).join('');
 
-    html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}">
+    const panelId = `hyper-user-matches-${entry.username}`;
+    const matchContent = matchRowsHtml || '<p class="muted" style="padding:.4rem 0;font-size:.8rem;text-align:center;">Sense pronòstics visibles encara.</p>';
+
+    html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}" onclick="toggleHyperPlayerPronos('${entry.username}')">
       <span class="hri-pos">${medal || (i + 1)}</span>
       <span class="hri-crest">${crest}</span>
       <div class="hri-info">
@@ -603,8 +611,12 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       </div>
       <span class="hri-pts">${entry.points} <span class="pts-label">pts</span></span>
       ${isMe ? '<span class="rank-you">Tu</span>' : ''}
+      <span class="rank-arrow muted">›</span>
     </div>
-    ${matchRows ? `<div class="hrd-matches">${matchRows}</div>` : ''}`;
+    <div class="hrd-matches hidden" id="${panelId}">
+      ${matchContent}
+      <button class="btn-close-panel" onclick="toggleHyperPlayerPronos('${entry.username}')">✕ Tancar</button>
+    </div>`;
   });
 
   return `<div class="hyper-ranking">${html}</div>`;

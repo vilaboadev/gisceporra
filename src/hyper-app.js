@@ -79,6 +79,36 @@ function hyperNavigate(screen) {
 
 window.hyperNavigate = hyperNavigate;
 
+window.toggleHyperPlayerPronos = function(username) {
+  const panel = document.getElementById(`hyper-user-matches-${username}`);
+  if (!panel) return;
+  const rankItem = panel.previousElementSibling;
+  const isHidden = panel.classList.contains('hidden');
+  if (isHidden) {
+    panel.classList.remove('hidden');
+    rankItem?.classList.add('open');
+  } else {
+    panel.classList.add('hidden');
+    rankItem?.classList.remove('open');
+  }
+};
+
+window.toggleAllHyperMatches = function() {
+  const panels = document.querySelectorAll('.hrd-matches');
+  if (!panels.length) return;
+  const anyHidden = Array.from(panels).some(p => p.classList.contains('hidden'));
+  panels.forEach(panel => {
+    const rankItem = panel.previousElementSibling;
+    if (anyHidden) {
+      panel.classList.remove('hidden');
+      rankItem?.classList.add('open');
+    } else {
+      panel.classList.add('hidden');
+      rankItem?.classList.remove('open');
+    }
+  });
+};
+
 // ── Pantalla: Inici ────────────────────────────────────────────────────────
 async function loadHyperInfo(force = false) {
   const el = $('hyper-info-content');

@@ -981,6 +981,18 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: .75rem 1rem;
+  cursor: pointer;
+  transition: background .1s, border-radius .15s;
+}
+.hyper-rank-item:hover {
+  background: var(--surface2);
+}
+.hyper-rank-item.open {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.hyper-rank-item.open .rank-arrow {
+  transform: rotate(90deg);
 }
 .hyper-rank-item.is-me {
   border-color: var(--accent);
