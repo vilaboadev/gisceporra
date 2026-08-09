@@ -843,15 +843,25 @@ body {
 }
 
 @media (min-width: 768px) {
-  #hyper-header {
-    padding: 0 2rem;
-  }
-  #hyper-nav {
+  #hyper-app {
     max-width: 768px;
     margin: 0 auto;
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
-    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.4);
+  }
+  #hyper-header {
+    padding: 0 1.5rem;
+  }
+  #hyper-main .screen {
+    max-width: 100%;
+  }
+  #hyper-nav {
+    max-width: 100%;
+    margin: 0;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
   }
 }
 
@@ -873,9 +883,6 @@ body {
     width: 30px;
     height: 30px;
     font-size: .85rem;
-  }
-  .hmc-status-row {
-    justify-content: center;
   }
 }
 
@@ -935,22 +942,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: .75rem;
+  width: 100%;
 }
 
-@media (min-width: 600px) {
-  .hyper-matches-grid,
-  .hyper-results-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  }
-  .hyper-matches-grid .hyper-match-card,
-  .hyper-results-grid .hyper-result-card {
-    margin-bottom: 0;
-  }
+.hyper-match-card {
+  margin-bottom: .75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
-
-.hyper-match-card { margin-bottom: .75rem; }
-.hyper-match-card.locked { opacity: .8; }
+.hyper-match-card.locked { opacity: .85; }
 
 .hmc-header {
   display: flex;
@@ -988,13 +989,14 @@ body {
   width: 100%;
   margin: .2rem 0;
 }
+
 .hmc-teams {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
   gap: .75rem;
-  margin-bottom: .5rem;
+  margin: .4rem 0 .6rem;
 }
 .hmc-team {
   font-size: .9rem;
@@ -1019,7 +1021,7 @@ body {
   color: var(--green);
   border-radius: 20px;
   font-size: .75rem;
-  padding: .15rem .5rem;
+  padding: .15rem .6rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1033,7 +1035,7 @@ body {
   color: var(--orange);
   border-radius: 20px;
   font-size: .75rem;
-  padding: .15rem .5rem;
+  padding: .15rem .6rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1044,7 +1046,7 @@ body {
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: .15rem .5rem;
+  padding: .15rem .6rem;
   white-space: nowrap;
 }
 
@@ -1061,21 +1063,28 @@ body {
 }
 
 /* ─── Hyper Result Cards ──────────────────────── */
-.hyper-result-card { margin-bottom: .5rem; }
+.hyper-result-card {
+  margin-bottom: .5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
 .hrc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: .4rem;
+  margin-bottom: .5rem;
 }
 .hrc-match {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: .5rem;
+  margin-bottom: .35rem;
 }
 .hrc-team {
-  font-size: .85rem;
+  font-size: .88rem;
+  font-weight: 500;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1083,8 +1092,92 @@ body {
   white-space: nowrap;
 }
 .hrc-team.right { text-align: right; }
-.hrc-score { font-size: 1rem; font-weight: 700; min-width: 3.5rem; text-align: center; flex-shrink: 0; }
-.hrc-pred { font-size: .78rem; margin-top: .25rem; }
+.hrc-score {
+  font-size: 1.05rem;
+  font-weight: 700;
+  min-width: 3.5rem;
+  text-align: center;
+  flex-shrink: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .2rem .5rem;
+}
+.hrc-pred {
+  font-size: .78rem;
+  text-align: center;
+  margin-top: .35rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--border);
+  padding-top: .35rem;
+}
+
+/* ─── Hyper Standings Table ─────────────────────── */
+.hyper-standings-card {
+  padding: .5rem .75rem;
+}
+.hyper-standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.hyper-standings-table th {
+  padding: 6px 6px;
+  color: var(--text3);
+  font-weight: 600;
+  font-size: .75rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.hyper-standings-table th.hst-rank,
+.hyper-standings-table th.hst-team {
+  text-align: left;
+}
+.hyper-standings-table td {
+  padding: 6px 6px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+.hyper-standings-table tr:first-child td {
+  border-top: none;
+}
+.hyper-standings-table tr.is-mine {
+  background: rgba(59, 130, 246, 0.12);
+  font-weight: 600;
+}
+.hyper-standings-table td.hst-rank {
+  text-align: left;
+  font-weight: 600;
+  width: 1.5rem;
+}
+.hyper-standings-table td.hst-team {
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.hyper-standings-table .hst-badge {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.hyper-standings-table .hst-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hyper-standings-table td.hst-pts {
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 580px) {
+  .hyper-standings-table .hst-opt {
+    display: none !important;
+  }
+}
 
 /* ─── Hyper Ranking ───────────────────────────── */
 .hyper-ranking { display: flex; flex-direction: column; gap: .5rem; }

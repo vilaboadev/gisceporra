@@ -311,7 +311,7 @@ export async function fetchTeamPlayers(teamId) {
   }
 }
 
-export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2026-2027') {
+export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2025-2026') {
   const cacheKey = `standings_${leagueId}_${leagueYear}`;
   const cached = getTsdbCache(cacheKey, 15 * 60 * 1000);
   if (cached) return cached;
@@ -479,35 +479,35 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
   // Classificació de la lliga
   if (standings.length > 0) {
     html += '<h3 class="section-h">Classificació</h3>';
-    html += `<div class="hyper-standings-card card" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-      <table class="hyper-standings-table" style="width:100%;border-collapse:collapse;font-size:0.85em;white-space:nowrap;">
+    html += `<div class="hyper-standings-card card">
+      <table class="hyper-standings-table">
         <thead>
-          <tr style="text-align:left;opacity:0.7;">
-            <th style="padding:4px 6px;">#</th>
-            <th style="padding:4px 6px;">Equip</th>
-            <th style="padding:4px 6px;text-align:center;">PJ</th>
-            <th style="padding:4px 6px;text-align:center;">G</th>
-            <th style="padding:4px 6px;text-align:center;">E</th>
-            <th style="padding:4px 6px;text-align:center;">P</th>
-            <th style="padding:4px 6px;text-align:center;">DG</th>
-            <th style="padding:4px 6px;text-align:center;">Pts</th>
+          <tr>
+            <th class="hst-rank">#</th>
+            <th class="hst-team">Equip</th>
+            <th class="hst-pj">PJ</th>
+            <th class="hst-opt">G</th>
+            <th class="hst-opt">E</th>
+            <th class="hst-opt">P</th>
+            <th class="hst-opt">DG</th>
+            <th class="hst-pts">Pts</th>
           </tr>
         </thead>
         <tbody>
           ${standings.map(row => {
             const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
-            return `<tr style="${isMine ? 'background:rgba(255,255,255,0.08);font-weight:600;' : ''}border-top:1px solid rgba(255,255,255,0.08);">
-              <td style="padding:5px 6px;">${row.intRank}</td>
-              <td style="padding:5px 6px;display:flex;align-items:center;gap:6px;">
-                ${row.strTeamBadge ? `<img src="${row.strTeamBadge}" alt="" style="width:16px;height:16px;object-fit:contain;" />` : ''}
-                ${row.strTeam}
+            return `<tr class="${isMine ? 'is-mine' : ''}">
+              <td class="hst-rank">${row.intRank}</td>
+              <td class="hst-team">
+                ${row.strTeamBadge ? `<img class="hst-badge" src="${row.strTeamBadge}" alt="" />` : ''}
+                <span class="hst-name">${escHtml(row.strTeam)}</span>
               </td>
-              <td style="padding:5px 6px;text-align:center;">${row.intPlayed}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intWin}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intDraw}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intLoss}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intGoalDifference}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intPoints}</td>
+              <td class="hst-pj">${row.intPlayed}</td>
+              <td class="hst-opt">${row.intWin}</td>
+              <td class="hst-opt">${row.intDraw}</td>
+              <td class="hst-opt">${row.intLoss}</td>
+              <td class="hst-opt">${row.intGoalDifference}</td>
+              <td class="hst-pts">${row.intPoints}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -668,9 +668,9 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   let html = `<div class="hyper-club-card card"${accent ? ` style="border-left:4px solid ${accent}"` : ''}>
     <div class="hcc-header">
       ${badgeUrl
-        ? `<img class="hcc-badge" src="${badgeUrl}" alt="${displayName}" />`
-        : `<div class="hcc-crest-emoji">${crest}</div>`
-      }
+      ? `<img class="hcc-badge" src="${badgeUrl}" alt="${displayName}" />`
+      : `<div class="hcc-crest-emoji">${crest}</div>`
+    }
       <div class="hcc-titles">
         <h2 class="hcc-name">${displayName}</h2>
         <p class="hcc-sub muted">${location} · ${country}</p>
@@ -703,10 +703,10 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   // Plantilla
   if (players.length > 0) {
     const goalkeepers = players.filter(p => p.strPosition === 'Goalkeeper');
-    const defenders   = players.filter(p => p.strPosition === 'Defender');
+    const defenders = players.filter(p => p.strPosition === 'Defender');
     const midfielders = players.filter(p => p.strPosition === 'Midfield');
-    const forwards    = players.filter(p => p.strPosition === 'Forward');
-    const others      = players.filter(p => !['Goalkeeper','Defender','Midfield','Forward'].includes(p.strPosition));
+    const forwards = players.filter(p => p.strPosition === 'Forward');
+    const others = players.filter(p => !['Goalkeeper', 'Defender', 'Midfield', 'Forward'].includes(p.strPosition));
 
     const renderGroup = (label, group) => {
       if (!group.length) return '';
