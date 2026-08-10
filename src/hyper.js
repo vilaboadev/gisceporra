@@ -20,13 +20,7 @@ function escHtml(str) {
     .replace(/'/g, '&#x27;');
 }
 
-/** Validates an URL as http(s)-only to prevent javascript: scheme injection. */
-function safeSrc(url) {
-  return /^https?:\/\//.test(url ?? '') ? url : '';
-}
-
 const CACHE_KEY = 'espn_league_matches';
-const CACHE_KEY_LAST = 'espn_league_last_matches';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hores
 
 // ── ESPN API Endpoints & Cache ─────────────────────────────────────────────
@@ -35,6 +29,8 @@ const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/esp.
 const ESPN_TEAM_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/teams';
 
 const tsdbMemoryCache = new Map();
+let memoryLeagueMatchesCache = null;
+let memoryLeagueMatchesTimestamp = 0;
 
 function getTsdbCache(key, ttlMs) {
   const mem = tsdbMemoryCache.get(key);
@@ -80,6 +76,7 @@ export function espnEventToHyperMatch(e) {
   const isLive = e.status?.type?.state === 'in';
   const dateStr = e.date ? e.date.slice(0, 10) : '';
   const timeStr = e.date ? (e.date.slice(11, 16) + ':00') : '00:00:00';
+  const timeMs = e.date ? (Date.parse(e.date) || 0) : 0;
 
   return {
     idEvent: String(e.id),
@@ -91,6 +88,7 @@ export function espnEventToHyperMatch(e) {
     dateEvent: dateStr,
     strTime: timeStr,
     strTimestamp: e.date || '',
+    timeMs,
     intHomeScore: isFinished || isLive ? String(home?.score ?? '0') : null,
     intAwayScore: isFinished || isLive ? String(away?.score ?? '0') : null,
     strHomeBadge: home?.team?.logo || '',
@@ -121,13 +119,20 @@ export async function fetchEspnLeagueMatches() {
  * Retorna el cache de partits de la lliga des d'ESPN.
  */
 export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } = {}) {
+  const now = Date.now();
+  if (!forceRefresh && memoryLeagueMatchesCache && (now - memoryLeagueMatchesTimestamp < CACHE_TTL_MS)) {
+    return memoryLeagueMatchesCache;
+  }
+
   if (!forceRefresh && typeof localStorage !== 'undefined') {
     const cachedRaw = localStorage.getItem(CACHE_KEY);
     if (cachedRaw) {
       try {
         const parsed = JSON.parse(cachedRaw);
-        const age = Date.now() - parsed.timestamp;
+        const age = now - parsed.timestamp;
         if (age < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          memoryLeagueMatchesCache = parsed.data;
+          memoryLeagueMatchesTimestamp = parsed.timestamp;
           return parsed.data;
         }
       } catch (e) {
@@ -137,8 +142,11 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
   }
 
   const freshData = await fetchEspnLeagueMatches();
+  memoryLeagueMatchesCache = freshData;
+  memoryLeagueMatchesTimestamp = now;
+
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: freshData }));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: now, data: freshData }));
   }
   return freshData;
 }
@@ -285,7 +293,7 @@ export async function fetchTeamNextMatches(teamId) {
       m.strAwayTeam === teamLabel
     )
     .filter(m => m.intHomeScore == null)
-    .sort((a, b) => new Date(a.strTimestamp || a.strDate).getTime() - new Date(b.strTimestamp || b.strDate).getTime());
+    .sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
 
   setTsdbCache(cacheKey, matches);
   return matches;
@@ -317,7 +325,7 @@ export async function fetchTeamLastMatches(teamId) {
       m.strAwayTeam === teamLabel
     )
     .filter(m => m.intHomeScore != null)
-    .sort((a, b) => new Date(b.strTimestamp || b.strDate).getTime() - new Date(a.strTimestamp || a.strDate).getTime());
+    .sort((a, b) => (b.timeMs || 0) - (a.timeMs || 0));
 
   setTsdbCache(cacheKey, matches);
   return matches;
