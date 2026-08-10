@@ -2,94 +2,162 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  getLastMatchesForTeam,
-  fetchAllPastLeagueMatches,
-  getLeagueLastEventsCache,
+  espnEventToHyperMatch,
+  fetchEspnLeagueMatches,
+  fetchTeamNextMatches,
   fetchTeamLastMatches,
+  fetchHyperStandings,
+  fetchTeamDetails,
+  fetchTeamPlayers,
+  getLastMatchesForTeam,
+  getNextMatchesForTeam,
 } from '../src/hyper.js';
 
-test('getLastMatchesForTeam retorna els partits directes de la clau de l’equip', () => {
-  const eventsByTeam = new Map([
-    ['1337', [{ idEvent: 'E1', idHomeTeam: '1337', idAwayTeam: '1338', intHomeScore: '2', intAwayScore: '1' }]],
-  ]);
+test('espnEventToHyperMatch transforma un esdeveniment d’ESPN a la lliga Hypermotion', () => {
+  const espnEvent = {
+    id: '401883226',
+    date: '2026-08-14T18:30Z',
+    status: { type: { completed: false, state: 'pre', name: 'STATUS_SCHEDULED' } },
+    competitions: [
+      {
+        competitors: [
+          {
+            homeAway: 'home',
+            team: { id: '20983', name: 'Real Sociedad II', displayName: 'Real Sociedad II', logo: 'https://a.espncdn.com/logo1.png' },
+            score: '0',
+          },
+          {
+            homeAway: 'away',
+            team: { id: '4438', name: 'Castellón', displayName: 'Castellón', logo: 'https://a.espncdn.com/logo2.png' },
+            score: '0',
+          },
+        ],
+      },
+    ],
+  };
 
-  const matches = getLastMatchesForTeam(eventsByTeam, '1337');
-  assert.equal(matches.length, 1);
-  assert.equal(matches[0].idEvent, 'E1');
+  const parsed = espnEventToHyperMatch(espnEvent);
+  assert.equal(parsed.idEvent, '401883226');
+  assert.equal(parsed.strHomeTeam, 'Real Sociedad II');
+  assert.equal(parsed.strAwayTeam, 'Castellón');
+  assert.equal(parsed.idHomeTeam, '20983');
+  assert.equal(parsed.idAwayTeam, '4438');
+  assert.equal(parsed.strDate, '2026-08-14');
+  assert.equal(parsed.strTime, '18:30:00');
+  assert.equal(parsed.intHomeScore, null);
+  assert.equal(parsed.intAwayScore, null);
+  assert.equal(parsed.strHomeBadge, 'https://a.espncdn.com/logo1.png');
+  assert.equal(parsed.idLeague, 'esp.2');
 });
 
-test('getLastMatchesForTeam busca com a visitant en altres equips si no hi ha clau directa', () => {
-  const eventsByTeam = new Map([
-    ['1338', [{ idEvent: 'E2', idHomeTeam: '1338', idAwayTeam: '1337', intHomeScore: '0', intAwayScore: '1' }]],
-  ]);
+test('espnEventToHyperMatch inclou gols si el partit està finalitzat', () => {
+  const espnEvent = {
+    id: '401883227',
+    date: '2026-08-14T20:00Z',
+    status: { type: { completed: true, state: 'post', name: 'STATUS_FULL_TIME' } },
+    competitions: [
+      {
+        competitors: [
+          { homeAway: 'home', team: { id: '2737', name: 'Albacete' }, score: '2' },
+          { homeAway: 'away', team: { id: '98', name: 'Las Palmas' }, score: '1' },
+        ],
+      },
+    ],
+  };
 
-  const matches = getLastMatchesForTeam(eventsByTeam, '1337');
-  assert.equal(matches.length, 1);
-  assert.equal(matches[0].idEvent, 'E2');
+  const parsed = espnEventToHyperMatch(espnEvent);
+  assert.equal(parsed.intHomeScore, '2');
+  assert.equal(parsed.intAwayScore, '1');
 });
 
-test('getLastMatchesForTeam retorna array buit si no troba cap partit', () => {
-  const eventsByTeam = new Map([
-    ['1338', [{ idEvent: 'E2', idHomeTeam: '1338', idAwayTeam: '1339' }]],
-  ]);
-
-  const matches = getLastMatchesForTeam(eventsByTeam, '1337');
-  assert.equal(matches.length, 0);
-});
-
-test('fetchAllPastLeagueMatches realitza peticions per lots paral·lels i organitza per equip', async () => {
+test('fetchTeamNextMatches i fetchTeamLastMatches filtren correctament per equip d’ESPN', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
-    const teamId = new URL(url).searchParams.get('id');
-    return {
-      ok: true,
-      json: async () => ({
-        results: [
-          { idEvent: `E_${teamId}`, idHomeTeam: teamId, idAwayTeam: '9999', intHomeScore: '1', intAwayScore: '0' },
-        ],
-      }),
-    };
+    const urlStr = String(url);
+    if (urlStr.includes('scoreboard')) {
+      return {
+        ok: true,
+        json: async () => ({
+          events: [
+            {
+              id: '101',
+              date: '2026-08-10T18:00Z',
+              status: { type: { completed: true, state: 'post' } },
+              competitions: [{ competitors: [
+                { homeAway: 'home', team: { id: '2737', name: 'Albacete' }, score: '1' },
+                { homeAway: 'away', team: { id: '6832', name: 'Almería' }, score: '0' },
+              ] }],
+            },
+            {
+              id: '102',
+              date: '2026-08-20T18:00Z',
+              status: { type: { completed: false, state: 'pre' } },
+              competitions: [{ competitors: [
+                { homeAway: 'home', team: { id: '2737', name: 'Albacete' }, score: '0' },
+                { homeAway: 'away', team: { id: '98', name: 'Las Palmas' }, score: '0' },
+              ] }],
+            },
+          ],
+        }),
+      };
+    }
+    return { ok: false, status: 404 };
   };
 
   try {
-    const teamIds = ['1001', '1002', '1003'];
-    const map = await fetchAllPastLeagueMatches(teamIds);
+    if (globalThis.localStorage) globalThis.localStorage.clear();
 
-    assert.equal(map.size, 3);
-    assert.equal(map.get('1001')[0].idEvent, 'E_1001');
-    assert.equal(map.get('1002')[0].idEvent, 'E_1002');
-    assert.equal(map.get('1003')[0].idEvent, 'E_1003');
+    const nextMatches = await fetchTeamNextMatches('Albacete');
+    assert.equal(nextMatches.length, 1);
+    assert.equal(nextMatches[0].idEvent, '102');
+
+    const lastMatches = await fetchTeamLastMatches('Albacete');
+    assert.equal(lastMatches.length, 1);
+    assert.equal(lastMatches[0].idEvent, '101');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('fetchTeamLastMatches utilitza el cache de lliga', async () => {
+test('fetchHyperStandings obte i transforma la classificacio d’ESPN', async () => {
   const originalFetch = globalThis.fetch;
-  let fetchCount = 0;
-
   globalThis.fetch = async (url) => {
-    fetchCount++;
-    const teamId = new URL(url).searchParams.get('id') || '1337';
-    return {
-      ok: true,
-      json: async () => ({
-        results: [
-          { idEvent: `E_${teamId}`, idHomeTeam: teamId, idAwayTeam: '9999', intHomeScore: '3', intAwayScore: '0' },
-        ],
-      }),
-    };
+    if (String(url).includes('standings')) {
+      return {
+        ok: true,
+        json: async () => ({
+          children: [{
+            standings: {
+              entries: [
+                {
+                  team: { id: '2737', name: 'Albacete', logos: [{ href: 'https://logo.png' }] },
+                  stats: [
+                    { name: 'rank', value: 1 },
+                    { name: 'gamesPlayed', value: 3 },
+                    { name: 'wins', value: 2 },
+                    { name: 'ties', value: 1 },
+                    { name: 'losses', value: 0 },
+                    { name: 'pointDifferential', value: 3 },
+                    { name: 'points', value: 7 },
+                  ],
+                },
+              ],
+            },
+          }],
+        }),
+      };
+    }
+    return { ok: false, status: 404 };
   };
 
   try {
-    // Esborrem localStorage per forçar regenerar cache de lliga
-    if (globalThis.localStorage) {
-      globalThis.localStorage.clear();
-    }
-
-    const matches = await fetchTeamLastMatches('133735');
-    assert.ok(Array.isArray(matches));
-    assert.ok(matches.length > 0);
+    const table = await fetchHyperStandings('esp.2', '2026-2027');
+    assert.equal(table.length, 1);
+    assert.equal(table[0].idTeam, '2737');
+    assert.equal(table[0].strTeam, 'Albacete');
+    assert.equal(table[0].intRank, 1);
+    assert.equal(table[0].intPlayed, 3);
+    assert.equal(table[0].intPoints, 7);
   } finally {
     globalThis.fetch = originalFetch;
   }
