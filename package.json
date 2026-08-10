@@ -4,9 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "node --test",
-    "test:coverage": "node --test --experimental-test-coverage",
-    "start": "python -m http.server 4173"
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "repository": {
     "type": "git",
@@ -19,5 +22,8 @@
     "url": "https://github.com/vilaboadev/gisceporra/issues"
   },
   "homepage": "https://github.com/vilaboadev/gisceporra#readme",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "vite": "^8.2.1"
+  }
 }

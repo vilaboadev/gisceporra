@@ -2,6 +2,13 @@
 
 SPA vanilla (sense framework) amb Supabase com a backend. Esports data d'ESPN API (mundial) i TheSportDB (hypermotion).
 
+## 🚀 Desenvolupament Local
+
+```bash
+npm run dev              # Servidor de desenvolupament amb Hot Reload (Vite)
+npm run build            # Compilació de producció
+```
+
 ```
 index.html          → UI: login, selector de porra, app mundial, app hypermotion
 src/
