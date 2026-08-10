@@ -6,7 +6,7 @@
  */
 
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
-import { getTeamInfo } from './hyper-teams.js';
+import { getTeamInfo, HYPER_TEAMS } from './hyper-teams.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,8 +25,199 @@ function safeSrc(url) {
   return /^https?:\/\//.test(url ?? '') ? url : '';
 }
 
-// ── TheSportDB API ─────────────────────────────────────────────────────────
+const CACHE_KEY = 'tsdb_league_next_matches';
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hores
+
+// ── TheSportDB API Cache ───────────────────────────────────────────────────
 const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
+const tsdbMemoryCache = new Map();
+
+function getTsdbCache(key, ttlMs) {
+  const mem = tsdbMemoryCache.get(key);
+  if (mem && Date.now() - mem.timestamp < ttlMs) {
+    return mem.data;
+  }
+  try {
+    const raw = sessionStorage.getItem(`tsdb_cache_${key}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.timestamp < ttlMs) {
+        tsdbMemoryCache.set(key, parsed);
+        return parsed.data;
+      }
+    }
+  } catch (e) {
+    // Ignore storage issues
+  }
+  return null;
+}
+
+function setTsdbCache(key, data) {
+  const item = { timestamp: Date.now(), data };
+  tsdbMemoryCache.set(key, item);
+  try {
+    sessionStorage.setItem(`tsdb_cache_${key}`, JSON.stringify(item));
+  } catch (e) {
+    // Ignore storage issues
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Serialitza el Map a un objecte pla per poder-lo desar a localStorage.
+ */
+function serializeCache(eventsByTeam) {
+  return {
+    timestamp: Date.now(),
+    data: Object.fromEntries(eventsByTeam),
+  };
+}
+
+function deserializeCache(raw) {
+  return new Map(Object.entries(raw.data));
+}
+
+/**
+ * Retorna el cache de propers partits de la lliga, refrescant-lo
+ * automàticament si ha caducat o no existeix.
+ */
+export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } = {}) {
+  if (!forceRefresh) {
+    const cachedRaw = localStorage.getItem(CACHE_KEY);
+    if (cachedRaw) {
+      try {
+        const parsed = JSON.parse(cachedRaw);
+        const age = Date.now() - parsed.timestamp;
+        if (age < CACHE_TTL_MS) {
+          return deserializeCache(parsed);
+        }
+      } catch (e) {
+        console.warn('Cache de TheSportsDB corrupte, es regenera', e);
+      }
+    }
+  }
+
+  // Cache absent, caducat o forçat: el regenerem
+  const freshData = await fetchAllUpcomingLeagueMatches(allTeamIds);
+  localStorage.setItem(CACHE_KEY, JSON.stringify(serializeCache(freshData)));
+  return freshData;
+}
+
+/**
+ * Retorna l'inici (dilluns 00:00) i el final (diumenge 23:59:59) de la
+ * setmana actual, en base a la data local.
+ */
+function getCurrentWeekRange(now = new Date()) {
+  const day = now.getDay(); // 0 = diumenge, 1 = dilluns, ...
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  return { start: monday, end: sunday };
+}
+
+/**
+ * Comprova si un event (segons ev.strTimestamp) cau dins de la setmana actual.
+ */
+function isThisWeek(ev, weekRange) {
+  if (!ev.strTimestamp) return false;
+  const evDate = new Date(ev.strTimestamp);
+  return evDate >= weekRange.start && evDate <= weekRange.end;
+}
+
+/**
+ * Obté el proper partit d'aquesta setmana de cada equip de la lliga (amb peticions paral·leles).
+ *
+ * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
+ * @returns {Promise<Map<string, object>>} Map<idTeam, event>
+ */
+export async function fetchAllUpcomingLeagueMatches(allTeamIds) {
+  const eventsByTeam = new Map();
+  const pendingTeamIds = new Set(allTeamIds.map(String));
+  const weekRange = getCurrentWeekRange();
+
+  // Execució per lots paral·lels de 5 equips per evitar la lentitud de 8s
+  const teamList = [...allTeamIds];
+  const BATCH_SIZE = 5;
+
+  for (let i = 0; i < teamList.length; i += BATCH_SIZE) {
+    const chunk = teamList.slice(i, i + BATCH_SIZE).filter(id => pendingTeamIds.has(String(id)));
+    if (chunk.length === 0) continue;
+
+    const results = await Promise.all(
+      chunk.map(async teamId => {
+        try {
+          const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
+          if (!res.ok) return { teamId, ev: null };
+          const json = await res.json();
+          return { teamId, ev: json.events?.[0] ?? null };
+        } catch {
+          return { teamId, ev: null };
+        }
+      })
+    );
+
+    for (const { teamId, ev } of results) {
+      const key = String(teamId);
+      pendingTeamIds.delete(key);
+      if (!ev) continue;
+
+      if (isThisWeek(ev, weekRange)) {
+        eventsByTeam.set(key, ev);
+      }
+
+      const homeId = String(ev.idHomeTeam);
+      const awayId = String(ev.idAwayTeam);
+      const rivalId = key === homeId ? awayId : homeId;
+
+      if (pendingTeamIds.has(rivalId)) {
+        pendingTeamIds.delete(rivalId);
+        if (isThisWeek(ev, weekRange)) {
+          eventsByTeam.set(rivalId, ev);
+        }
+      }
+    }
+  }
+
+  return eventsByTeam;
+}
+
+/**
+ * A partir del Map idTeam -> event, retorna la llista d'events únics.
+ */
+export function dedupeEvents(eventsByTeam) {
+  const seen = new Map(); // idEvent -> event
+  for (const ev of eventsByTeam.values()) {
+    seen.set(ev.idEvent, ev);
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Retorna els propers partits d'un equip concret a partir del cache
+ * generat per fetchAllUpcomingLeagueMatches.
+ */
+export function getNextMatchesForTeam(eventsByTeam, teamId) {
+  const key = String(teamId);
+  const asHome = eventsByTeam.get(key);
+  if (asHome) return [asHome];
+
+  for (const ev of eventsByTeam.values()) {
+    if (String(ev.idAwayTeam) === key) return [ev];
+  }
+  return [];
+}
+
+const ALL_TEAM_IDS = Object.values(HYPER_TEAMS).map(team => team.id);
 
 /**
  * Obté els pròxims partits d'un equip (màx. 15 de theSportDB free tier).
@@ -35,10 +226,28 @@ const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
  */
 export async function fetchTeamNextMatches(teamId) {
   if (!teamId) return [];
-  const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
-  if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
-  const json = await res.json();
-  return json.events ?? [];
+  const cacheKey = `next_team_${teamId}`;
+  const cached = getTsdbCache(cacheKey, 5 * 60 * 1000);
+  if (cached) return cached;
+
+  const leagueEventsCache = await getLeagueEventsCache(ALL_TEAM_IDS);
+  let matches = getNextMatchesForTeam(leagueEventsCache, teamId);
+
+  // Si no n'hi ha en el calendari setmanal de la lliga, consulta directa a l'API de l'equip
+  if (matches.length === 0) {
+    try {
+      const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
+      if (res.ok) {
+        const json = await res.json();
+        matches = json.events ?? [];
+      }
+    } catch {
+      matches = [];
+    }
+  }
+
+  setTsdbCache(cacheKey, matches);
+  return matches;
 }
 
 /**
@@ -48,10 +257,16 @@ export async function fetchTeamNextMatches(teamId) {
  */
 export async function fetchTeamLastMatches(teamId) {
   if (!teamId) return [];
+  const cacheKey = `last_${teamId}`;
+  const cached = getTsdbCache(cacheKey, 5 * 60 * 1000);
+  if (cached) return cached;
+
   const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
   if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
   const json = await res.json();
-  return json.results ?? [];
+  const results = json.results ?? [];
+  setTsdbCache(cacheKey, results);
+  return results;
 }
 
 /**
@@ -61,10 +276,16 @@ export async function fetchTeamLastMatches(teamId) {
  */
 export async function fetchTeamDetails(teamId) {
   if (!teamId) return null;
+  const cacheKey = `details_${teamId}`;
+  const cached = getTsdbCache(cacheKey, 60 * 60 * 1000);
+  if (cached) return cached;
+
   const res = await fetch(`${TSDB_BASE}/lookupteam.php?id=${teamId}`);
   if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
   const json = await res.json();
-  return json.teams?.[0] ?? null;
+  const team = json.teams?.[0] ?? null;
+  if (team) setTsdbCache(cacheKey, team);
+  return team;
 }
 
 /**
@@ -74,20 +295,32 @@ export async function fetchTeamDetails(teamId) {
  */
 export async function fetchTeamPlayers(teamId) {
   if (!teamId) return [];
+  const cacheKey = `players_${teamId}`;
+  const cached = getTsdbCache(cacheKey, 60 * 60 * 1000);
+  if (cached) return cached;
+
   try {
     const res = await fetch(`${TSDB_BASE}/lookup_all_players.php?id=${teamId}`);
     if (!res.ok) return [];
     const json = await res.json();
-    return json.player ?? [];
+    const players = json.player ?? [];
+    setTsdbCache(cacheKey, players);
+    return players;
   } catch {
     return [];
   }
 }
 
-export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2026-2027') {
+export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2025-2026') {
+  const cacheKey = `standings_${leagueId}_${leagueYear}`;
+  const cached = getTsdbCache(cacheKey, 15 * 60 * 1000);
+  if (cached) return cached;
+
   const res = await fetch(`${TSDB_BASE}/lookuptable.php?l=${leagueId}&s=${leagueYear}`);
   const data = await res.json();
-  return data.table ?? [];
+  const table = data.table ?? [];
+  setTsdbCache(cacheKey, table);
+  return table;
 }
 
 // ── Helpers de format ──────────────────────────────────────────────────────
@@ -126,6 +359,26 @@ export function isPredictionLocked(dateStr, timeStr = '00:00:00') {
 
 // ── Renderitzat: Pantalla d'Inici ──────────────────────────────────────────
 
+function getMatchStatusBadge(locked, pred, isHypermotion = true) {
+  if (!isHypermotion) return '';
+  if (locked) {
+    return pred
+      ? `<span class="hyper-pred-locked">🔒 ${pred.pred_home}–${pred.pred_away}</span>`
+      : `<span class="hyper-badge-warn">⚠️ Sense pronòstic</span>`;
+  }
+  return pred
+    ? `<span class="hyper-badge-ok">✅ Pronòstic fet: ${pred.pred_home}–${pred.pred_away}</span>`
+    : `<span class="hyper-badge-warn">⚠️ Pronòstic pendent</span>`;
+}
+
+function getPredictButton(m, key, locked, pred, isHypermotion = true) {
+  if (!isHypermotion || locked) return '';
+  const label = pred ? 'Edita pronòstic' : 'Predir resultat';
+  const extraClass = pred ? ' btn-edit' : '';
+  const matchDate = m.dateEvent || m.strDate || '';
+  return `<button class="btn-primary${extraClass} hyper-predict-btn" data-event="${key}" data-home="${escHtml(m.strHomeTeam)}" data-away="${escHtml(m.strAwayTeam)}" data-date="${escHtml(matchDate)}" data-time="${escHtml(m.strTime ?? '')}">${label}</button>`;
+}
+
 /**
  * Genera el HTML de la pantalla d'inici de Hypermotion.
  * @param {Array}  nextMatches       Pròxims partits del teu equip (theSportDB)
@@ -145,55 +398,49 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
     <div class="htb-crest">${teamInfo?.crest ?? '⚽'}</div>
     <div class="htb-info">
       <div class="htb-name">${teamLabel}</div>
-      <div class="htb-sub muted">El teu equip · Liga Hypermotion 2025-26</div>
+      <div class="htb-sub muted">El teu equip · Liga Hypermotion</div>
     </div>
   </div>`;
 
   // Pròxims partits (màx. 4)
   const upcomingRaw = nextMatches
-    .filter(m => m.strDate)
+    .filter(m => m.dateEvent || m.strDate)
     .slice(0, 4);
 
   if (upcomingRaw.length > 0) {
     html += '<h3 class="section-h">Pròxims partits</h3>';
+    html += '<div class="hyper-matches-grid">';
     html += upcomingRaw.map(m => {
       const key = m.idEvent;
+      const matchDate = m.dateEvent || m.strDate || '';
       const pred = predictionsByKey.get(String(key));
-      const locked = isPredictionLocked(m.strDate, m.strTime);
-      const dateLabel = formatHyperMatchDate(m.strDate, m.strTime);
+      const isHypermotion = String(m.idLeague ?? '') === '4400';
+      const locked = isPredictionLocked(matchDate, m.strTime);
+      const dateLabel = formatHyperMatchDate(matchDate, m.strTime);
       const isHome = m.idHomeTeam === (teamInfo?.id ?? teamName);
-      const opponent = isHome ? m.strAwayTeam : m.strHomeTeam;
 
-      let statusBadge = '';
-      if (locked) {
-        // Finestra tancada — si tenim la seva predicció, la mostrem
-        if (pred) {
-          statusBadge = `<span class="hyper-pred-locked">🔒 ${pred.pred_home}–${pred.pred_away}</span>`;
-        } else {
-          statusBadge = `<span class="hyper-badge-warn">⚠️ Sense pronòstic</span>`;
-        }
-      } else {
-        if (pred) {
-          statusBadge = `<span class="hyper-badge-ok">✅ Pronòstic fet: ${pred.pred_home}–${pred.pred_away}</span>`;
-        } else {
-          statusBadge = `<span class="hyper-badge-warn">⚠️ Pronòstic pendent</span>`;
-        }
-      }
+      const statusBadge = getMatchStatusBadge(locked, pred, isHypermotion);
+      const predictBtn = getPredictButton(m, key, locked, pred, isHypermotion);
 
-      return `<div class="hyper-match-card card ${locked ? 'locked' : ''}">
+      return `<div class="hyper-match-card card ${locked || !isHypermotion ? 'locked' : ''}">
         <div class="hmc-header">
-          <span class="hmc-date muted">${dateLabel}</span>
-          ${statusBadge}
+          <div class="hmc-meta-row">
+            <span class="hmc-date muted">${dateLabel}</span>
+            <span class="hmc-league muted">${escHtml(m.strLeague ?? '')}</span>
+          </div>
+          <div class="hmc-status-row">
+            ${statusBadge}
+          </div>
         </div>
         <div class="hmc-teams">
-          <span class="hmc-team ${isHome ? 'hmc-mine' : ''}">${m.strHomeTeam}</span>
+          <span class="hmc-team ${isHome ? 'hmc-mine' : ''}">${escHtml(m.strHomeTeam)}</span>
           <span class="hmc-vs">vs</span>
-          <span class="hmc-team ${!isHome ? 'hmc-mine' : ''}">${m.strAwayTeam}</span>
+          <span class="hmc-team ${!isHome ? 'hmc-mine' : ''}">${escHtml(m.strAwayTeam)}</span>
         </div>
-        ${!locked && !pred ? `<button class="btn-primary hyper-predict-btn" data-event="${key}" data-home="${m.strHomeTeam}" data-away="${m.strAwayTeam}" data-date="${m.strDate}" data-time="${m.strTime ?? ''}">Predir resultat</button>` : ''}
-        ${!locked && pred ? `<button class="btn-primary btn-edit hyper-predict-btn" data-event="${key}" data-home="${m.strHomeTeam}" data-away="${m.strAwayTeam}" data-date="${m.strDate}" data-time="${m.strTime ?? ''}">Edita pronòstic</button>` : ''}
+        ${predictBtn}
       </div>`;
     }).join('');
+    html += '</div>';
   } else {
     html += '<p class="muted">No hi ha pròxims partits disponibles.</p>';
   }
@@ -202,6 +449,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
   const finishedRaw = lastMatches.filter(m => m.intHomeScore != null).slice(0, 5);
   if (finishedRaw.length > 0) {
     html += '<h3 class="section-h">Últims resultats</h3>';
+    html += '<div class="hyper-results-grid">';
     html += finishedRaw.map(m => {
       const key = m.idEvent;
       const pred = predictionsByKey.get(String(key));
@@ -225,40 +473,41 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         ${pred ? `<div class="hrc-pred muted">Pronòstic: ${pred.pred_home}–${pred.pred_away}</div>` : ''}
       </div>`;
     }).join('');
+    html += '</div>';
   }
 
   // Classificació de la lliga
   if (standings.length > 0) {
     html += '<h3 class="section-h">Classificació</h3>';
     html += `<div class="hyper-standings-card card">
-      <table class="hyper-standings-table" style="width:100%;border-collapse:collapse;font-size:0.85em;">
+      <table class="hyper-standings-table">
         <thead>
-          <tr style="text-align:left;opacity:0.7;">
-            <th style="padding:4px 6px;">#</th>
-            <th style="padding:4px 6px;">Equip</th>
-            <th style="padding:4px 6px;text-align:center;">PJ</th>
-            <th style="padding:4px 6px;text-align:center;">G</th>
-            <th style="padding:4px 6px;text-align:center;">E</th>
-            <th style="padding:4px 6px;text-align:center;">P</th>
-            <th style="padding:4px 6px;text-align:center;">DG</th>
-            <th style="padding:4px 6px;text-align:center;">Pts</th>
+          <tr>
+            <th class="hst-rank">#</th>
+            <th class="hst-team">Equip</th>
+            <th class="hst-pj">PJ</th>
+            <th class="hst-opt">G</th>
+            <th class="hst-opt">E</th>
+            <th class="hst-opt">P</th>
+            <th class="hst-opt">DG</th>
+            <th class="hst-pts">Pts</th>
           </tr>
         </thead>
         <tbody>
           ${standings.map(row => {
             const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
-            return `<tr style="${isMine ? 'background:rgba(255,255,255,0.08);font-weight:600;' : ''}border-top:1px solid rgba(255,255,255,0.08);">
-              <td style="padding:5px 6px;">${row.intRank}</td>
-              <td style="padding:5px 6px;display:flex;align-items:center;gap:6px;">
-                ${row.strTeamBadge ? `<img src="${row.strTeamBadge}" alt="" style="width:16px;height:16px;object-fit:contain;" />` : ''}
-                ${row.strTeam}
+            return `<tr class="${isMine ? 'is-mine' : ''}">
+              <td class="hst-rank">${row.intRank}</td>
+              <td class="hst-team">
+                ${row.strTeamBadge ? `<img class="hst-badge" src="${row.strTeamBadge}" alt="" />` : ''}
+                <span class="hst-name">${escHtml(row.strTeam)}</span>
               </td>
-              <td style="padding:5px 6px;text-align:center;">${row.intPlayed}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intWin}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intDraw}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intLoss}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intGoalDifference}</td>
-              <td style="padding:5px 6px;text-align:center;">${row.intPoints}</td>
+              <td class="hst-pj">${row.intPlayed}</td>
+              <td class="hst-opt">${row.intWin}</td>
+              <td class="hst-opt">${row.intDraw}</td>
+              <td class="hst-opt">${row.intLoss}</td>
+              <td class="hst-opt">${row.intGoalDifference}</td>
+              <td class="hst-pts">${row.intPoints}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -322,6 +571,11 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
 
   let html = '';
 
+  html += `<div class="hyper-ranking-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+    <span class="section-h" style="margin:0;">Classificació</span>
+    <button class="btn-link-muted hyper-toggle-all-btn" onclick="toggleAllHyperMatches()">👁️ Obrir / Tancar tots</button>
+  </div>`;
+
   sorted.forEach((entry, i) => {
     const isMe = entry.username === currentUsername;
     const teamInfo = getTeamInfo(entry.teamName);
@@ -335,7 +589,7 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       return locked || result?.home_goals != null;
     });
 
-    const matchRows = visibleMatches.map(pred => {
+    const matchRowsHtml = visibleMatches.map(pred => {
       const result = (entry.results ?? []).find(r => r.match_key === pred.match_key);
       const pts = result?.home_goals != null
         ? calculateHyperMatchPoints(pred, result)
@@ -353,7 +607,10 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       </div>`;
     }).join('');
 
-    html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}">
+    const panelId = `hyper-user-matches-${entry.username}`;
+    const matchContent = matchRowsHtml || '<p class="muted" style="padding:.4rem 0;font-size:.8rem;text-align:center;">Sense pronòstics visibles encara.</p>';
+
+    html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}" onclick="toggleHyperPlayerPronos('${entry.username}')">
       <span class="hri-pos">${medal || (i + 1)}</span>
       <span class="hri-crest">${crest}</span>
       <div class="hri-info">
@@ -362,8 +619,12 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
       </div>
       <span class="hri-pts">${entry.points} <span class="pts-label">pts</span></span>
       ${isMe ? '<span class="rank-you">Tu</span>' : ''}
+      <span class="rank-arrow muted">›</span>
     </div>
-    ${matchRows ? `<div class="hrd-matches">${matchRows}</div>` : ''}`;
+    <div class="hrd-matches hidden" id="${panelId}">
+      ${matchContent}
+      <button class="btn-close-panel" onclick="toggleHyperPlayerPronos('${entry.username}')">✕ Tancar</button>
+    </div>`;
   });
 
   return `<div class="hyper-ranking">${html}</div>`;
@@ -407,9 +668,9 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   let html = `<div class="hyper-club-card card"${accent ? ` style="border-left:4px solid ${accent}"` : ''}>
     <div class="hcc-header">
       ${badgeUrl
-        ? `<img class="hcc-badge" src="${badgeUrl}" alt="${displayName}" />`
-        : `<div class="hcc-crest-emoji">${crest}</div>`
-      }
+      ? `<img class="hcc-badge" src="${badgeUrl}" alt="${displayName}" />`
+      : `<div class="hcc-crest-emoji">${crest}</div>`
+    }
       <div class="hcc-titles">
         <h2 class="hcc-name">${displayName}</h2>
         <p class="hcc-sub muted">${location} · ${country}</p>
@@ -442,10 +703,10 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   // Plantilla
   if (players.length > 0) {
     const goalkeepers = players.filter(p => p.strPosition === 'Goalkeeper');
-    const defenders   = players.filter(p => p.strPosition === 'Defender');
+    const defenders = players.filter(p => p.strPosition === 'Defender');
     const midfielders = players.filter(p => p.strPosition === 'Midfield');
-    const forwards    = players.filter(p => p.strPosition === 'Forward');
-    const others      = players.filter(p => !['Goalkeeper','Defender','Midfield','Forward'].includes(p.strPosition));
+    const forwards = players.filter(p => p.strPosition === 'Forward');
+    const others = players.filter(p => !['Goalkeeper', 'Defender', 'Midfield', 'Forward'].includes(p.strPosition));
 
     const renderGroup = (label, group) => {
       if (!group.length) return '';
