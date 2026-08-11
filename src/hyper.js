@@ -26,6 +26,7 @@ function safeSrc(url) {
 }
 
 const CACHE_KEY = 'tsdb_league_next_matches';
+const CACHE_KEY_LAST = 'tsdb_league_last_matches';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hores
 
 // ── TheSportDB API Cache ───────────────────────────────────────────────────
@@ -85,7 +86,7 @@ function deserializeCache(raw) {
  * automàticament si ha caducat o no existeix.
  */
 export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } = {}) {
-  if (!forceRefresh) {
+  if (!forceRefresh && typeof localStorage !== 'undefined') {
     const cachedRaw = localStorage.getItem(CACHE_KEY);
     if (cachedRaw) {
       try {
@@ -102,7 +103,37 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
 
   // Cache absent, caducat o forçat: el regenerem
   const freshData = await fetchAllUpcomingLeagueMatches(allTeamIds);
-  localStorage.setItem(CACHE_KEY, JSON.stringify(serializeCache(freshData)));
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(serializeCache(freshData)));
+  }
+  return freshData;
+}
+
+/**
+ * Retorna el cache d'últims partits de la lliga, refrescant-lo
+ * automàticament si ha caducat o no existeix.
+ */
+export async function getLeagueLastEventsCache(allTeamIds, { forceRefresh = false } = {}) {
+  if (!forceRefresh && typeof localStorage !== 'undefined') {
+    const cachedRaw = localStorage.getItem(CACHE_KEY_LAST);
+    if (cachedRaw) {
+      try {
+        const parsed = JSON.parse(cachedRaw);
+        const age = Date.now() - parsed.timestamp;
+        if (age < CACHE_TTL_MS) {
+          return deserializeCache(parsed);
+        }
+      } catch (e) {
+        console.warn('Cache de TheSportsDB (últims partits) corrupte, es regenera', e);
+      }
+    }
+  }
+
+  // Cache absent, caducat o forçat: el regenerem
+  const freshData = await fetchAllPastLeagueMatches(allTeamIds);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(CACHE_KEY_LAST, JSON.stringify(serializeCache(freshData)));
+  }
   return freshData;
 }
 
@@ -192,12 +223,52 @@ export async function fetchAllUpcomingLeagueMatches(allTeamIds) {
 }
 
 /**
+ * Obté els últims partits de cada equip de la lliga (amb peticions paral·leles).
+ *
+ * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
+ * @returns {Promise<Map<string, Array>>} Map<idTeam, Array<event>>
+ */
+export async function fetchAllPastLeagueMatches(allTeamIds) {
+  const eventsByTeam = new Map();
+  const teamList = [...allTeamIds];
+  const BATCH_SIZE = 5;
+
+  for (let i = 0; i < teamList.length; i += BATCH_SIZE) {
+    const chunk = teamList.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      chunk.map(async teamId => {
+        try {
+          const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
+          if (!res.ok) return { teamId, events: [] };
+          const json = await res.json();
+          return { teamId, events: json.results ?? json.events ?? [] };
+        } catch {
+          return { teamId, events: [] };
+        }
+      })
+    );
+
+    for (const { teamId, events } of results) {
+      eventsByTeam.set(String(teamId), events);
+    }
+  }
+
+  return eventsByTeam;
+}
+
+/**
  * A partir del Map idTeam -> event, retorna la llista d'events únics.
  */
 export function dedupeEvents(eventsByTeam) {
   const seen = new Map(); // idEvent -> event
   for (const ev of eventsByTeam.values()) {
-    seen.set(ev.idEvent, ev);
+    if (Array.isArray(ev)) {
+      for (const item of ev) {
+        if (item?.idEvent) seen.set(item.idEvent, item);
+      }
+    } else if (ev?.idEvent) {
+      seen.set(ev.idEvent, ev);
+    }
   }
   return [...seen.values()];
 }
@@ -213,6 +284,24 @@ export function getNextMatchesForTeam(eventsByTeam, teamId) {
 
   for (const ev of eventsByTeam.values()) {
     if (String(ev.idAwayTeam) === key) return [ev];
+  }
+  return [];
+}
+
+/**
+ * Retorna els últims partits d'un equip concret a partir del cache
+ * generat per fetchAllPastLeagueMatches.
+ */
+export function getLastMatchesForTeam(eventsByTeam, teamId) {
+  const key = String(teamId);
+  const matches = eventsByTeam.get(key);
+  if (matches && matches.length > 0) return matches;
+
+  for (const list of eventsByTeam.values()) {
+    if (Array.isArray(list)) {
+      const found = list.filter(ev => String(ev?.idHomeTeam) === key || String(ev?.idAwayTeam) === key);
+      if (found.length > 0) return found;
+    }
   }
   return [];
 }
@@ -261,12 +350,24 @@ export async function fetchTeamLastMatches(teamId) {
   const cached = getTsdbCache(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
 
-  const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
-  if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
-  const json = await res.json();
-  const results = json.results ?? [];
-  setTsdbCache(cacheKey, results);
-  return results;
+  const leagueLastEventsCache = await getLeagueLastEventsCache(ALL_TEAM_IDS);
+  let matches = getLastMatchesForTeam(leagueLastEventsCache, teamId);
+
+  // Si no n'hi ha en el cache de la lliga, consulta directa a l'API de l'equip
+  if (matches.length === 0) {
+    try {
+      const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
+      if (res.ok) {
+        const json = await res.json();
+        matches = json.results ?? json.events ?? [];
+      }
+    } catch {
+      matches = [];
+    }
+  }
+
+  setTsdbCache(cacheKey, matches);
+  return matches;
 }
 
 /**
@@ -311,7 +412,7 @@ export async function fetchTeamPlayers(teamId) {
   }
 }
 
-export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2025-2026') {
+export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2026-2027') {
   const cacheKey = `standings_${leagueId}_${leagueYear}`;
   const cached = getTsdbCache(cacheKey, 15 * 60 * 1000);
   if (cached) return cached;
@@ -495,8 +596,8 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         </thead>
         <tbody>
           ${standings.map(row => {
-            const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
-            return `<tr class="${isMine ? 'is-mine' : ''}">
+      const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
+      return `<tr class="${isMine ? 'is-mine' : ''}">
               <td class="hst-rank">${row.intRank}</td>
               <td class="hst-team">
                 ${row.strTeamBadge ? `<img class="hst-badge" src="${row.strTeamBadge}" alt="" />` : ''}
@@ -509,7 +610,7 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
               <td class="hst-opt">${row.intGoalDifference}</td>
               <td class="hst-pts">${row.intPoints}</td>
             </tr>`;
-          }).join('')}
+    }).join('')}
         </tbody>
       </table>
     </div>`;

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ca">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -14,23 +15,22 @@
     };
   </script>
 </head>
+
 <body>
 
   <!-- ═══════════════ LOGIN SCREEN ═══════════════ -->
   <div id="login-screen">
     <div class="login-card">
       <div class="login-logo">⚽</div>
-      <h1 class="login-title">Gisceporra<br><span>Mundial 2026</span></h1>
+      <h1 class="login-title">Gisceporra</h1>
       <form id="login-form" autocomplete="on" novalidate>
         <div class="form-group">
           <label for="login-username">Usuari</label>
-          <input id="login-username" type="text" autocomplete="username"
-                 placeholder="Ex: AAA" spellcheck="false" />
+          <input id="login-username" type="text" autocomplete="username" placeholder="Ex: AAA" spellcheck="false" />
         </div>
         <div class="form-group">
           <label for="login-password">Contrasenya</label>
-          <input id="login-password" type="password" autocomplete="current-password"
-                 placeholder="Contrasenya" />
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Contrasenya" />
         </div>
         <p id="login-error" class="login-error" role="alert"></p>
         <button type="submit" class="btn-primary">Entrar</button>
@@ -49,7 +49,7 @@
           <span class="sel-icon">🏟️</span>
           <div class="sel-text">
             <span class="sel-label">Liga Hypermotion</span>
-            <span class="sel-sub">Temporada 2025-26</span>
+            <span class="sel-sub">Temporada 2026-27</span>
           </div>
           <span class="sel-arrow">→</span>
         </button>
@@ -91,22 +91,30 @@
 
       <!-- ── SCREEN: Inici ── -->
       <section id="hyper-screen-info" class="screen hidden">
-        <div id="hyper-info-content"><p class="muted">Carregant…</p></div>
+        <div id="hyper-info-content">
+          <p class="muted">Carregant…</p>
+        </div>
       </section>
 
       <!-- ── SCREEN: Classificació ── -->
       <section id="hyper-screen-ranking" class="screen hidden">
-        <div id="hyper-ranking-content"><p class="muted">Carregant classificació…</p></div>
+        <div id="hyper-ranking-content">
+          <p class="muted">Carregant classificació…</p>
+        </div>
       </section>
 
       <!-- ── SCREEN: El Meu Equip ── -->
       <section id="hyper-screen-club" class="screen hidden">
-        <div id="hyper-club-content"><p class="muted">Carregant dades del club…</p></div>
+        <div id="hyper-club-content">
+          <p class="muted">Carregant dades del club…</p>
+        </div>
       </section>
 
       <!-- ── SCREEN: Perfil ── -->
       <section id="hyper-screen-profile" class="screen hidden">
-        <div id="hyper-profile-content"><p class="muted">Carregant perfil…</p></div>
+        <div id="hyper-profile-content">
+          <p class="muted">Carregant perfil…</p>
+        </div>
       </section>
 
       <!-- ── SCREEN: Com funciona ── -->
@@ -182,7 +190,9 @@
           <div id="porra-ranking"></div>
         </div>
         <div id="tab-pronostics" class="tab-content hidden">
-          <div id="bet-container"><p class="muted">Carregant…</p></div>
+          <div id="bet-container">
+            <p class="muted">Carregant…</p>
+          </div>
         </div>
       </section>
 
@@ -228,4 +238,5 @@
   <script type="module" src="./src/app.js"></script>
   <script type="module" src="./src/hyper-app.js"></script>
 </body>
+
 </html>
