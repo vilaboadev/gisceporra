@@ -1,7 +1,7 @@
 /**
  * hyper.js — Lògica i renderitzat de la Porra-League Hypermotion
  *
- * Font de dades de partits: TheSportDB (free tier, clau "3")
+ * Font de dades de partits: ESPN API (Spanish LALIGA 2 - esp.2)
  * Font de pronòstics i resultats: Supabase
  */
 
@@ -20,18 +20,17 @@ function escHtml(str) {
     .replace(/'/g, '&#x27;');
 }
 
-/** Validates an URL as http(s)-only to prevent javascript: scheme injection. */
-function safeSrc(url) {
-  return /^https?:\/\//.test(url ?? '') ? url : '';
-}
-
-const CACHE_KEY = 'tsdb_league_next_matches';
-const CACHE_KEY_LAST = 'tsdb_league_last_matches';
+const CACHE_KEY = 'espn_league_matches';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hores
 
-// ── TheSportDB API Cache ───────────────────────────────────────────────────
-const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
+// ── ESPN API Endpoints & Cache ─────────────────────────────────────────────
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/scoreboard';
+const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/esp.2/standings';
+const ESPN_TEAM_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/teams';
+
 const tsdbMemoryCache = new Map();
+let memoryLeagueMatchesCache = null;
+let memoryLeagueMatchesTimestamp = 0;
 
 function getTsdbCache(key, ttlMs) {
   const mem = tsdbMemoryCache.get(key);
@@ -63,245 +62,205 @@ function setTsdbCache(key, data) {
   }
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 /**
- * Serialitza el Map a un objecte pla per poder-lo desar a localStorage.
+ * Converteix un esdeveniment d'ESPN en l'estructura estàndard de partit d'Hypermotion.
+ * @param {object} e  Esdeveniment d'ESPN
+ * @returns {object|null}
  */
-function serializeCache(eventsByTeam) {
+export function espnEventToHyperMatch(e) {
+  if (!e) return null;
+  const comp = e.competitions?.[0];
+  const home = comp?.competitors?.find(c => c.homeAway === 'home');
+  const away = comp?.competitors?.find(c => c.homeAway === 'away');
+  const isFinished = e.status?.type?.completed === true;
+  const isLive = e.status?.type?.state === 'in';
+  const dateStr = e.date ? e.date.slice(0, 10) : '';
+  const timeStr = e.date ? (e.date.slice(11, 16) + ':00') : '00:00:00';
+  const timeMs = e.date ? (Date.parse(e.date) || 0) : 0;
+
   return {
-    timestamp: Date.now(),
-    data: Object.fromEntries(eventsByTeam),
+    idEvent: String(e.id),
+    strHomeTeam: home?.team?.name || home?.team?.displayName || '',
+    strAwayTeam: away?.team?.name || away?.team?.displayName || '',
+    idHomeTeam: String(home?.team?.id || ''),
+    idAwayTeam: String(away?.team?.id || ''),
+    strDate: dateStr,
+    dateEvent: dateStr,
+    strTime: timeStr,
+    strTimestamp: e.date || '',
+    timeMs,
+    intHomeScore: isFinished || isLive ? String(home?.score ?? '0') : null,
+    intAwayScore: isFinished || isLive ? String(away?.score ?? '0') : null,
+    strHomeBadge: home?.team?.logo || '',
+    strAwayBadge: away?.team?.logo || '',
+    idLeague: 'esp.2',
+    strLeague: 'LaLiga Hypermotion',
+    status: e.status?.type?.name || 'STATUS_SCHEDULED',
   };
 }
 
-function deserializeCache(raw) {
-  return new Map(Object.entries(raw.data));
+/**
+ * Consulta l'API d'ESPN per obtenir el calendari complet de partits.
+ * @returns {Promise<Array>}
+ */
+export async function fetchEspnLeagueMatches() {
+  try {
+    const res = await fetch(`${ESPN_SCOREBOARD}?dates=20260801-20270630&limit=300`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    const events = json.events ?? [];
+    return events.map(espnEventToHyperMatch).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /**
- * Retorna el cache de propers partits de la lliga, refrescant-lo
- * automàticament si ha caducat o no existeix.
+ * Retorna el cache de partits de la lliga des d'ESPN.
  */
 export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } = {}) {
+  const now = Date.now();
+  if (!forceRefresh && memoryLeagueMatchesCache && (now - memoryLeagueMatchesTimestamp < CACHE_TTL_MS)) {
+    return memoryLeagueMatchesCache;
+  }
+
   if (!forceRefresh && typeof localStorage !== 'undefined') {
     const cachedRaw = localStorage.getItem(CACHE_KEY);
     if (cachedRaw) {
       try {
         const parsed = JSON.parse(cachedRaw);
-        const age = Date.now() - parsed.timestamp;
-        if (age < CACHE_TTL_MS) {
-          return deserializeCache(parsed);
+        const age = now - parsed.timestamp;
+        if (age < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          memoryLeagueMatchesCache = parsed.data;
+          memoryLeagueMatchesTimestamp = parsed.timestamp;
+          return parsed.data;
         }
       } catch (e) {
-        console.warn('Cache de TheSportsDB corrupte, es regenera', e);
+        console.warn('Cache d’ESPN corrupte, es regenera', e);
       }
     }
   }
 
-  // Cache absent, caducat o forçat: el regenerem
-  const freshData = await fetchAllUpcomingLeagueMatches(allTeamIds);
+  const freshData = await fetchEspnLeagueMatches();
+  memoryLeagueMatchesCache = freshData;
+  memoryLeagueMatchesTimestamp = now;
+
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(serializeCache(freshData)));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: now, data: freshData }));
   }
   return freshData;
 }
 
-/**
- * Retorna el cache d'últims partits de la lliga, refrescant-lo
- * automàticament si ha caducat o no existeix.
- */
-export async function getLeagueLastEventsCache(allTeamIds, { forceRefresh = false } = {}) {
-  if (!forceRefresh && typeof localStorage !== 'undefined') {
-    const cachedRaw = localStorage.getItem(CACHE_KEY_LAST);
-    if (cachedRaw) {
-      try {
-        const parsed = JSON.parse(cachedRaw);
-        const age = Date.now() - parsed.timestamp;
-        if (age < CACHE_TTL_MS) {
-          return deserializeCache(parsed);
-        }
-      } catch (e) {
-        console.warn('Cache de TheSportsDB (últims partits) corrupte, es regenera', e);
-      }
-    }
-  }
-
-  // Cache absent, caducat o forçat: el regenerem
-  const freshData = await fetchAllPastLeagueMatches(allTeamIds);
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(CACHE_KEY_LAST, JSON.stringify(serializeCache(freshData)));
-  }
-  return freshData;
+export async function getLeagueLastEventsCache(allTeamIds, options = {}) {
+  return getLeagueEventsCache(allTeamIds, options);
 }
 
 /**
- * Retorna l'inici (dilluns 00:00) i el final (diumenge 23:59:59) de la
- * setmana actual, en base a la data local.
- */
-function getCurrentWeekRange(now = new Date()) {
-  const day = now.getDay(); // 0 = diumenge, 1 = dilluns, ...
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-
-  const monday = new Date(now);
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() + diffToMonday);
-
-  const sunday = new Date(monday);
-  sunday.setDate(sunday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  return { start: monday, end: sunday };
-}
-
-/**
- * Comprova si un event (segons ev.strTimestamp) cau dins de la setmana actual.
- */
-function isThisWeek(ev, weekRange) {
-  if (!ev.strTimestamp) return false;
-  const evDate = new Date(ev.strTimestamp);
-  return evDate >= weekRange.start && evDate <= weekRange.end;
-}
-
-/**
- * Obté el proper partit d'aquesta setmana de cada equip de la lliga (amb peticions paral·leles).
- *
- * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
- * @returns {Promise<Map<string, object>>} Map<idTeam, event>
+ * Obté els pròxims partits de cada equip de la lliga (compatibilitat).
  */
 export async function fetchAllUpcomingLeagueMatches(allTeamIds) {
+  const matches = await getLeagueEventsCache(allTeamIds);
   const eventsByTeam = new Map();
-  const pendingTeamIds = new Set(allTeamIds.map(String));
-  const weekRange = getCurrentWeekRange();
-
-  // Execució per lots paral·lels de 5 equips per evitar la lentitud de 8s
-  const teamList = [...allTeamIds];
-  const BATCH_SIZE = 5;
-
-  for (let i = 0; i < teamList.length; i += BATCH_SIZE) {
-    const chunk = teamList.slice(i, i + BATCH_SIZE).filter(id => pendingTeamIds.has(String(id)));
-    if (chunk.length === 0) continue;
-
-    const results = await Promise.all(
-      chunk.map(async teamId => {
-        try {
-          const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
-          if (!res.ok) return { teamId, ev: null };
-          const json = await res.json();
-          return { teamId, ev: json.events?.[0] ?? null };
-        } catch {
-          return { teamId, ev: null };
-        }
-      })
-    );
-
-    for (const { teamId, ev } of results) {
-      const key = String(teamId);
-      pendingTeamIds.delete(key);
-      if (!ev) continue;
-
-      if (isThisWeek(ev, weekRange)) {
-        eventsByTeam.set(key, ev);
-      }
-
-      const homeId = String(ev.idHomeTeam);
-      const awayId = String(ev.idAwayTeam);
-      const rivalId = key === homeId ? awayId : homeId;
-
-      if (pendingTeamIds.has(rivalId)) {
-        pendingTeamIds.delete(rivalId);
-        if (isThisWeek(ev, weekRange)) {
-          eventsByTeam.set(rivalId, ev);
-        }
+  if (Array.isArray(matches)) {
+    for (const m of matches) {
+      if (m.intHomeScore == null) {
+        if (!eventsByTeam.has(m.idHomeTeam)) eventsByTeam.set(m.idHomeTeam, m);
+        if (!eventsByTeam.has(m.idAwayTeam)) eventsByTeam.set(m.idAwayTeam, m);
       }
     }
   }
-
   return eventsByTeam;
 }
 
 /**
- * Obté els últims partits de cada equip de la lliga (amb peticions paral·leles).
- *
- * @param {string[]|number[]} allTeamIds - IDs de tots els equips de la lliga
- * @returns {Promise<Map<string, Array>>} Map<idTeam, Array<event>>
+ * Obté els últims partits de cada equip de la lliga (compatibilitat).
  */
 export async function fetchAllPastLeagueMatches(allTeamIds) {
+  const matches = await getLeagueEventsCache(allTeamIds);
   const eventsByTeam = new Map();
-  const teamList = [...allTeamIds];
-  const BATCH_SIZE = 5;
-
-  for (let i = 0; i < teamList.length; i += BATCH_SIZE) {
-    const chunk = teamList.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(
-      chunk.map(async teamId => {
-        try {
-          const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
-          if (!res.ok) return { teamId, events: [] };
-          const json = await res.json();
-          return { teamId, events: json.results ?? json.events ?? [] };
-        } catch {
-          return { teamId, events: [] };
-        }
-      })
-    );
-
-    for (const { teamId, events } of results) {
-      eventsByTeam.set(String(teamId), events);
+  if (Array.isArray(matches)) {
+    for (const m of matches) {
+      if (m.intHomeScore != null) {
+        if (!eventsByTeam.has(m.idHomeTeam)) eventsByTeam.set(m.idHomeTeam, []);
+        if (!eventsByTeam.has(m.idAwayTeam)) eventsByTeam.set(m.idAwayTeam, []);
+        eventsByTeam.get(m.idHomeTeam).push(m);
+        eventsByTeam.get(m.idAwayTeam).push(m);
+      }
     }
   }
-
   return eventsByTeam;
 }
 
-/**
- * A partir del Map idTeam -> event, retorna la llista d'events únics.
- */
 export function dedupeEvents(eventsByTeam) {
-  const seen = new Map(); // idEvent -> event
-  for (const ev of eventsByTeam.values()) {
-    if (Array.isArray(ev)) {
-      for (const item of ev) {
-        if (item?.idEvent) seen.set(item.idEvent, item);
+  const seen = new Map();
+  if (eventsByTeam instanceof Map) {
+    for (const ev of eventsByTeam.values()) {
+      if (Array.isArray(ev)) {
+        for (const item of ev) {
+          if (item?.idEvent) seen.set(item.idEvent, item);
+        }
+      } else if (ev?.idEvent) {
+        seen.set(ev.idEvent, ev);
       }
-    } else if (ev?.idEvent) {
-      seen.set(ev.idEvent, ev);
+    }
+  } else if (Array.isArray(eventsByTeam)) {
+    for (const ev of eventsByTeam) {
+      if (ev?.idEvent) seen.set(ev.idEvent, ev);
     }
   }
   return [...seen.values()];
 }
 
-/**
- * Retorna els propers partits d'un equip concret a partir del cache
- * generat per fetchAllUpcomingLeagueMatches.
- */
 export function getNextMatchesForTeam(eventsByTeam, teamId) {
-  const key = String(teamId);
-  const asHome = eventsByTeam.get(key);
-  if (asHome) return [asHome];
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
+  const tsdbId = info?.tsdbId ? String(info.tsdbId) : null;
+  const teamLabel = info?.displayName || teamId;
 
-  for (const ev of eventsByTeam.values()) {
-    if (String(ev.idAwayTeam) === key) return [ev];
+  if (Array.isArray(eventsByTeam)) {
+    return eventsByTeam.filter(
+      m => (m.idHomeTeam === espnId || m.idAwayTeam === espnId || (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) || m.strHomeTeam === teamLabel || m.strAwayTeam === teamLabel) && m.intHomeScore == null
+    );
+  }
+  if (eventsByTeam instanceof Map) {
+    const found = [];
+    for (const ev of eventsByTeam.values()) {
+      const list = Array.isArray(ev) ? ev : [ev];
+      for (const m of list) {
+        if (!m) continue;
+        if (m.intHomeScore == null && (m.idHomeTeam === espnId || m.idAwayTeam === espnId || (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) || m.strHomeTeam === teamLabel || m.strAwayTeam === teamLabel)) {
+          found.push(m);
+        }
+      }
+    }
+    return dedupeEvents(found);
   }
   return [];
 }
 
-/**
- * Retorna els últims partits d'un equip concret a partir del cache
- * generat per fetchAllPastLeagueMatches.
- */
 export function getLastMatchesForTeam(eventsByTeam, teamId) {
-  const key = String(teamId);
-  const matches = eventsByTeam.get(key);
-  if (matches && matches.length > 0) return matches;
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
+  const tsdbId = info?.tsdbId ? String(info.tsdbId) : null;
+  const teamLabel = info?.displayName || teamId;
 
-  for (const list of eventsByTeam.values()) {
-    if (Array.isArray(list)) {
-      const found = list.filter(ev => String(ev?.idHomeTeam) === key || String(ev?.idAwayTeam) === key);
-      if (found.length > 0) return found;
+  if (Array.isArray(eventsByTeam)) {
+    return eventsByTeam.filter(
+      m => (m.idHomeTeam === espnId || m.idAwayTeam === espnId || (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) || m.strHomeTeam === teamLabel || m.strAwayTeam === teamLabel) && m.intHomeScore != null
+    );
+  }
+  if (eventsByTeam instanceof Map) {
+    const found = [];
+    for (const ev of eventsByTeam.values()) {
+      const list = Array.isArray(ev) ? ev : [ev];
+      for (const m of list) {
+        if (!m) continue;
+        if (m.intHomeScore != null && (m.idHomeTeam === espnId || m.idAwayTeam === espnId || (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) || m.strHomeTeam === teamLabel || m.strAwayTeam === teamLabel)) {
+          found.push(m);
+        }
+      }
     }
+    return dedupeEvents(found);
   }
   return [];
 }
@@ -309,102 +268,152 @@ export function getLastMatchesForTeam(eventsByTeam, teamId) {
 const ALL_TEAM_IDS = Object.values(HYPER_TEAMS).map(team => team.id);
 
 /**
- * Obté els pròxims partits d'un equip (màx. 15 de theSportDB free tier).
- * @param {string} teamId  ID de theSportDB
+ * Obté els pròxims partits d'un equip des d'ESPN.
+ * @param {string} teamId  ID d'ESPN / TSDB o nom intern
  * @returns {Promise<Array>}
  */
 export async function fetchTeamNextMatches(teamId) {
   if (!teamId) return [];
-  const cacheKey = `next_team_${teamId}`;
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
+  const tsdbId = info?.tsdbId ? String(info.tsdbId) : null;
+  const teamLabel = info?.displayName || teamId;
+
+  const cacheKey = `next_team_${espnId}`;
   const cached = getTsdbCache(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
 
-  const leagueEventsCache = await getLeagueEventsCache(ALL_TEAM_IDS);
-  let matches = getNextMatchesForTeam(leagueEventsCache, teamId);
-
-  // Si no n'hi ha en el calendari setmanal de la lliga, consulta directa a l'API de l'equip
-  if (matches.length === 0) {
-    try {
-      const res = await fetch(`${TSDB_BASE}/eventsnext.php?id=${teamId}`);
-      if (res.ok) {
-        const json = await res.json();
-        matches = json.events ?? [];
-      }
-    } catch {
-      matches = [];
-    }
-  }
+  const allMatches = await getLeagueEventsCache(ALL_TEAM_IDS);
+  const matches = allMatches
+    .filter(m =>
+      m.idHomeTeam === espnId ||
+      m.idAwayTeam === espnId ||
+      (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) ||
+      m.strHomeTeam === teamLabel ||
+      m.strAwayTeam === teamLabel
+    )
+    .filter(m => m.intHomeScore == null)
+    .sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
 
   setTsdbCache(cacheKey, matches);
   return matches;
 }
 
 /**
- * Obté els últims partits d'un equip.
- * @param {string} teamId  ID de theSportDB
+ * Obté els últims partits d'un equip des d'ESPN.
+ * @param {string} teamId  ID d'ESPN / TSDB o nom intern
  * @returns {Promise<Array>}
  */
 export async function fetchTeamLastMatches(teamId) {
   if (!teamId) return [];
-  const cacheKey = `last_${teamId}`;
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
+  const tsdbId = info?.tsdbId ? String(info.tsdbId) : null;
+  const teamLabel = info?.displayName || teamId;
+
+  const cacheKey = `last_${espnId}`;
   const cached = getTsdbCache(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
 
-  const leagueLastEventsCache = await getLeagueLastEventsCache(ALL_TEAM_IDS);
-  let matches = getLastMatchesForTeam(leagueLastEventsCache, teamId);
-
-  // Si no n'hi ha en el cache de la lliga, consulta directa a l'API de l'equip
-  if (matches.length === 0) {
-    try {
-      const res = await fetch(`${TSDB_BASE}/eventslast.php?id=${teamId}`);
-      if (res.ok) {
-        const json = await res.json();
-        matches = json.results ?? json.events ?? [];
-      }
-    } catch {
-      matches = [];
-    }
-  }
+  const allMatches = await getLeagueEventsCache(ALL_TEAM_IDS);
+  const matches = allMatches
+    .filter(m =>
+      m.idHomeTeam === espnId ||
+      m.idAwayTeam === espnId ||
+      (tsdbId && (m.idHomeTeam === tsdbId || m.idAwayTeam === tsdbId)) ||
+      m.strHomeTeam === teamLabel ||
+      m.strAwayTeam === teamLabel
+    )
+    .filter(m => m.intHomeScore != null)
+    .sort((a, b) => (b.timeMs || 0) - (a.timeMs || 0));
 
   setTsdbCache(cacheKey, matches);
   return matches;
 }
 
 /**
- * Obté els detalls d'un equip.
- * @param {string} teamId  ID de theSportDB
+ * Obté els detalls d'un equip des d'ESPN API.
+ * @param {string} teamId  ID d'ESPN / TSDB o nom intern
  * @returns {Promise<object|null>}
  */
 export async function fetchTeamDetails(teamId) {
   if (!teamId) return null;
-  const cacheKey = `details_${teamId}`;
-  const cached = getTsdbCache(cacheKey, 60 * 60 * 1000);
-  if (cached) return cached;
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
 
-  const res = await fetch(`${TSDB_BASE}/lookupteam.php?id=${teamId}`);
-  if (!res.ok) throw new Error(`TheSportDB error ${res.status}`);
-  const json = await res.json();
-  const team = json.teams?.[0] ?? null;
-  if (team) setTsdbCache(cacheKey, team);
-  return team;
-}
-
-/**
- * Obté la plantilla de l'equip.
- * @param {string} teamId  ID de theSportDB
- * @returns {Promise<Array>}
- */
-export async function fetchTeamPlayers(teamId) {
-  if (!teamId) return [];
-  const cacheKey = `players_${teamId}`;
+  const cacheKey = `details_${espnId}`;
   const cached = getTsdbCache(cacheKey, 60 * 60 * 1000);
   if (cached) return cached;
 
   try {
-    const res = await fetch(`${TSDB_BASE}/lookup_all_players.php?id=${teamId}`);
+    const res = await fetch(`${ESPN_TEAM_BASE}/${espnId}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const team = json.team || {};
+
+    const clubhouseLink = team.links?.find(l => l.rel?.includes('clubhouse') && l.rel?.includes('desktop'))?.href || '';
+    const statsLink = team.links?.find(l => l.rel?.includes('stats') && l.rel?.includes('desktop'))?.href || '';
+    const fixturesLink = team.links?.find(l => l.rel?.includes('schedule') && l.rel?.includes('desktop'))?.href || '';
+
+    const teamObj = {
+      idTeam: espnId,
+      strTeam: team.displayName || info?.displayName || '',
+      strName: team.name || '',
+      strLocation: team.location || info?.city || '',
+      strAbbreviation: team.abbreviation || info?.shortName || '',
+      strBadge: team.logos?.[0]?.href || '',
+      strBadgeDark: team.logos?.find(l => l.rel?.includes('dark'))?.href || '',
+      strStadium: info?.stadium || '–',
+      strLeague: 'LaLiga Hypermotion',
+      strColour1: team.color ? `#${team.color}` : null,
+      strColour2: team.alternateColor ? `#${team.alternateColor}` : null,
+      recordSummary: team.record?.items?.[0]?.summary || '',
+      nextEventName: team.nextEvent?.[0]?.name || '',
+      strWebsite: clubhouseLink,
+      statsUrl: statsLink,
+      fixturesUrl: fixturesLink,
+      links: [
+        clubhouseLink && { label: 'Fitxa ESPN', icon: '🌐', url: clubhouseLink },
+        statsLink && { label: 'Estadístiques', icon: '📊', url: statsLink },
+        fixturesLink && { label: 'Calendari', icon: '📅', url: fixturesLink },
+      ].filter(Boolean),
+    };
+    setTsdbCache(cacheKey, teamObj);
+    return teamObj;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Obté la plantilla de l'equip des d'ESPN API.
+ * @param {string} teamId  ID d'ESPN / TSDB o nom intern
+ * @returns {Promise<Array>}
+ */
+export async function fetchTeamPlayers(teamId) {
+  if (!teamId) return [];
+  const info = getTeamInfo(teamId);
+  const espnId = info?.id ? String(info.id) : String(teamId);
+
+  const cacheKey = `players_${espnId}`;
+  const cached = getTsdbCache(cacheKey, 60 * 60 * 1000);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(`${ESPN_TEAM_BASE}/${espnId}/roster`);
     if (!res.ok) return [];
     const json = await res.json();
-    const players = json.player ?? [];
+    const rawAthletes = json.athletes || json.entries || [];
+    const players = rawAthletes.map(a => {
+      let pos = a.position?.name || '';
+      if (pos === 'Midfielder') pos = 'Midfield';
+      return {
+        strPlayer: a.fullName || a.displayName || '',
+        strPosition: pos,
+        strNumber: a.jersey || '–',
+        strNationality: a.citizenship || a.citizenshipCountry?.abbreviation || '',
+      };
+    });
     setTsdbCache(cacheKey, players);
     return players;
   } catch {
@@ -412,22 +421,51 @@ export async function fetchTeamPlayers(teamId) {
   }
 }
 
-export async function fetchHyperStandings(leagueId = '4400', leagueYear = '2026-2027') {
+/**
+ * Obté la classificació de la lliga des d'ESPN API.
+ * @param {string} leagueId
+ * @param {string} leagueYear
+ * @returns {Promise<Array>}
+ */
+export async function fetchHyperStandings(leagueId = 'esp.2', leagueYear = '2026-2027') {
   const cacheKey = `standings_${leagueId}_${leagueYear}`;
   const cached = getTsdbCache(cacheKey, 15 * 60 * 1000);
   if (cached) return cached;
 
-  const res = await fetch(`${TSDB_BASE}/lookuptable.php?l=${leagueId}&s=${leagueYear}`);
-  const data = await res.json();
-  const table = data.table ?? [];
-  setTsdbCache(cacheKey, table);
-  return table;
+  try {
+    const res = await fetch(ESPN_STANDINGS);
+    if (!res.ok) throw new Error(`ESPN standings error ${res.status}`);
+    const json = await res.json();
+    const entries = json.children?.[0]?.standings?.entries || json.standings?.entries || [];
+    const table = entries.map(entry => {
+      const getStat = (name) => {
+        const s = entry.stats?.find(x => x.name === name);
+        return s ? Number(s.value) : 0;
+      };
+      return {
+        idTeam: String(entry.team?.id || ''),
+        strTeam: entry.team?.name || entry.team?.displayName || '',
+        strTeamBadge: entry.team?.logos?.[0]?.href || '',
+        intRank: getStat('rank'),
+        intPlayed: getStat('gamesPlayed'),
+        intWin: getStat('wins'),
+        intDraw: getStat('ties'),
+        intLoss: getStat('losses'),
+        intGoalDifference: getStat('pointDifferential'),
+        intPoints: getStat('points'),
+      };
+    });
+    setTsdbCache(cacheKey, table);
+    return table;
+  } catch {
+    return [];
+  }
 }
 
 // ── Helpers de format ──────────────────────────────────────────────────────
 
 /**
- * Formata una data de theSportDB (format: "2025-09-13 20:00:00") en català.
+ * Formata una data (format: "2025-09-13" o ISO) en català.
  * @param {string} dateStr
  * @param {string} timeStr
  * @returns {string}
@@ -482,8 +520,8 @@ function getPredictButton(m, key, locked, pred, isHypermotion = true) {
 
 /**
  * Genera el HTML de la pantalla d'inici de Hypermotion.
- * @param {Array}  nextMatches       Pròxims partits del teu equip (theSportDB)
- * @param {Array}  lastMatches       Últims partits (theSportDB)
+ * @param {Array}  nextMatches       Pròxims partits del teu equip
+ * @param {Array}  lastMatches       Últims partits
  * @param {Map}    predictionsByKey  Mapa match_key → predicció de l'usuari
  * @param {string} teamName          Nom intern de l'equip assignat
  * @returns {string} HTML
@@ -515,10 +553,10 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
       const key = m.idEvent;
       const matchDate = m.dateEvent || m.strDate || '';
       const pred = predictionsByKey.get(String(key));
-      const isHypermotion = String(m.idLeague ?? '') === '4400';
+      const isHypermotion = String(m.idLeague ?? '') === 'esp.2' || String(m.idLeague ?? '') === '4400';
       const locked = isPredictionLocked(matchDate, m.strTime);
       const dateLabel = formatHyperMatchDate(matchDate, m.strTime);
-      const isHome = m.idHomeTeam === (teamInfo?.id ?? teamName);
+      const isHome = m.idHomeTeam === (teamInfo?.id ?? teamName) || m.strHomeTeam === teamLabel;
 
       const statusBadge = getMatchStatusBadge(locked, pred, isHypermotion);
       const predictBtn = getPredictButton(m, key, locked, pred, isHypermotion);
@@ -735,36 +773,24 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
 
 /**
  * Genera el HTML de la pantalla del Club assignat.
- * @param {object|null} tsdbTeam  Dades de theSportDB (lookupteam)
+ * @param {object|null} tsdbTeam  Dades d'ESPN (lookupteam / team)
  * @param {string}      teamName  Nom intern (clau a HYPER_TEAMS)
- * @param {Array}       players   Plantilla de theSportDB
+ * @param {Array}       players   Plantilla d'ESPN
  * @returns {string}
  */
 export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   const localInfo = getTeamInfo(teamName);
   const displayName = tsdbTeam?.strTeam ?? localInfo?.displayName ?? teamName ?? '–';
-  const stadium = tsdbTeam?.strStadium ?? localInfo?.stadium ?? '–';
-  const stadiumCapacity = tsdbTeam?.intStadiumCapacity ? Number(tsdbTeam.intStadiumCapacity).toLocaleString('ca') : '–';
+  const stadium = localInfo?.stadium ?? tsdbTeam?.strStadium ?? '–';
   const location = tsdbTeam?.strLocation ?? localInfo?.city ?? '–';
-  const formed = tsdbTeam?.intFormedYear ?? '–';
-  const country = tsdbTeam?.strCountry ?? 'Espanya';
-  const description = tsdbTeam?.strDescriptionCA || tsdbTeam?.strDescriptionES || tsdbTeam?.strDescriptionEN || '';
+  const country = 'Espanya';
   const badgeUrl = tsdbTeam?.strBadge ?? '';
   const crest = localInfo?.crest ?? '⚽';
   const accent = tsdbTeam?.strColour1 ?? null;
-
-  const leagues = [1, 2, 3, 4, 5, 6, 7]
-    .map(n => n === 1 ? tsdbTeam?.strLeague : tsdbTeam?.[`strLeague${n}`])
-    .filter(l => l && l.trim() !== '');
-
-  const normalizeUrl = (u) => (u ? (u.startsWith('http') ? u : `https://${u}`) : null);
-  const links = [
-    tsdbTeam?.strWebsite && { label: 'Web', icon: '🌐', url: normalizeUrl(tsdbTeam.strWebsite) },
-    tsdbTeam?.strTwitter && { label: 'X', icon: '🐦', url: normalizeUrl(tsdbTeam.strTwitter) },
-    tsdbTeam?.strInstagram && { label: 'Instagram', icon: '📷', url: normalizeUrl(tsdbTeam.strInstagram) },
-    tsdbTeam?.strFacebook && { label: 'Facebook', icon: '📘', url: normalizeUrl(tsdbTeam.strFacebook) },
-    tsdbTeam?.strYoutube && { label: 'YouTube', icon: '▶️', url: normalizeUrl(tsdbTeam.strYoutube) },
-  ].filter(Boolean);
+  const abbreviation = tsdbTeam?.strAbbreviation ?? localInfo?.shortName ?? '';
+  const record = tsdbTeam?.recordSummary ?? '';
+  const nextEvent = tsdbTeam?.nextEventName ?? '';
+  const links = tsdbTeam?.links ?? [];
 
   let html = `<div class="hyper-club-card card"${accent ? ` style="border-left:4px solid ${accent}"` : ''}>
     <div class="hcc-header">
@@ -778,15 +804,12 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
       </div>
     </div>
     <div class="hcc-details">
-      <div class="hcc-row"><span class="hcc-label">Competicions</span><span>${leagues.join(' · ') || '–'}</span></div>
+      <div class="hcc-row"><span class="hcc-label">Competicions</span><span>LaLiga Hypermotion</span></div>
       <div class="hcc-row"><span class="hcc-label">Estadi</span><span>${stadium}</span></div>
-      <div class="hcc-row"><span class="hcc-label">Aforament</span><span>${stadiumCapacity}</span></div>
-      <div class="hcc-row"><span class="hcc-label">Fundat</span><span>${formed}</span></div>
+      ${abbreviation ? `<div class="hcc-row"><span class="hcc-label">Codi</span><span>${abbreviation}</span></div>` : ''}
+      ${record ? `<div class="hcc-row"><span class="hcc-label">Balanç</span><span>${record}</span></div>` : ''}
+      ${nextEvent ? `<div class="hcc-row"><span class="hcc-label">Pròxim partit</span><span>${nextEvent}</span></div>` : ''}
     </div>`;
-
-  if (description) {
-    html += `<p class="hcc-desc">${description.slice(0, 600)}${description.length > 600 ? '…' : ''}</p>`;
-  }
 
   if (links.length > 0) {
     html += `<div class="hcc-links" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
@@ -805,9 +828,9 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   if (players.length > 0) {
     const goalkeepers = players.filter(p => p.strPosition === 'Goalkeeper');
     const defenders = players.filter(p => p.strPosition === 'Defender');
-    const midfielders = players.filter(p => p.strPosition === 'Midfield');
+    const midfielders = players.filter(p => p.strPosition === 'Midfield' || p.strPosition === 'Midfielder');
     const forwards = players.filter(p => p.strPosition === 'Forward');
-    const others = players.filter(p => !['Goalkeeper', 'Defender', 'Midfield', 'Forward'].includes(p.strPosition));
+    const others = players.filter(p => !['Goalkeeper', 'Defender', 'Midfield', 'Midfielder', 'Forward'].includes(p.strPosition));
 
     const renderGroup = (label, group) => {
       if (!group.length) return '';
