@@ -1,16 +1,13 @@
 /**
- * Dades dels equips de la Lliga Hypermotion (Segunda División) 2025-26.
+ * Dades dels equips de la Lliga Hypermotion (Segunda División) 2026-27.
  *
- * La clau és el nom intern (theSportDB o API-football).
- * Els IDs de theSportDB es poden actualitzar quan s'assignin equips als participants.
- *
- * Per afegir un equip nou, busca el seu ID a:
- *   https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=NomEquip
+ * La clau és el nom intern. Els IDs d'ESPN s'utilitzen per identificar els equips a l'API pública.
  */
 
 export const HYPER_TEAMS = {
   'Ceuta': {
-    id: '144243',
+    id: '5404',
+    tsdbId: '144243',
     displayName: 'AD Ceuta FC',
     shortName: 'CEU',
     crest: '⚪',
@@ -18,7 +15,8 @@ export const HYPER_TEAMS = {
     city: 'Ceuta',
   },
   'Albacete': {
-    id: '134232',
+    id: '2737',
+    tsdbId: '134232',
     displayName: 'Albacete BP',
     shortName: 'ALB',
     crest: '⚪',
@@ -26,7 +24,8 @@ export const HYPER_TEAMS = {
     city: 'Albacete',
   },
   'Burgos': {
-    id: '138161',
+    id: '12597',
+    tsdbId: '138161',
     displayName: 'Burgos CF',
     shortName: 'BUR',
     crest: '⚫',
@@ -34,7 +33,8 @@ export const HYPER_TEAMS = {
     city: 'Burgos',
   },
   'Cadiz': {
-    id: '134222',
+    id: '3842',
+    tsdbId: '134222',
     displayName: 'Cádiz CF',
     shortName: 'CAD',
     crest: '🟡',
@@ -42,7 +42,8 @@ export const HYPER_TEAMS = {
     city: 'Cadis',
   },
   'Castellon': {
-    id: '138286',
+    id: '4438',
+    tsdbId: '138286',
     displayName: 'CD Castellón',
     shortName: 'CAS',
     crest: '⚫',
@@ -50,7 +51,8 @@ export const HYPER_TEAMS = {
     city: 'Castelló de la Plana',
   },
   'Eldense': {
-    id: '144246',
+    id: '7320',
+    tsdbId: '144246',
     displayName: 'CD Eldense',
     shortName: 'ELD',
     crest: '🔴',
@@ -58,7 +60,8 @@ export const HYPER_TEAMS = {
     city: 'Elda',
   },
   'Leganes': {
-    id: '134701',
+    id: '17534',
+    tsdbId: '134701',
     displayName: 'CD Leganés',
     shortName: 'LEG',
     crest: '🔵',
@@ -66,7 +69,8 @@ export const HYPER_TEAMS = {
     city: 'Leganés',
   },
   'Tenerife': {
-    id: '133840',
+    id: '245',
+    tsdbId: '133840',
     displayName: 'CD Tenerife',
     shortName: 'TEN',
     crest: '🔵',
@@ -74,15 +78,17 @@ export const HYPER_TEAMS = {
     city: 'Santa Cruz de Tenerife',
   },
   'Sabadell': {
-    id: '134704',
+    id: '11487',
+    tsdbId: '134704',
     displayName: 'CE Sabadell',
-    shortName: 'SAB',
+    shortName: 'CDS',
     crest: '🔵',
     stadium: 'Nova Creu Alta',
     city: 'Sabadell',
   },
   'Celta Fortuna': {
-    id: '137826',
+    id: '131858',
+    tsdbId: '137826',
     displayName: 'Celta Fortuna',
     shortName: 'CEL',
     crest: '🩵',
@@ -90,7 +96,8 @@ export const HYPER_TEAMS = {
     city: 'Vigo',
   },
   'Cordoba': {
-    id: '134627',
+    id: '8447',
+    tsdbId: '134627',
     displayName: 'Córdoba CF',
     shortName: 'COR',
     crest: '🟢',
@@ -98,7 +105,8 @@ export const HYPER_TEAMS = {
     city: 'Còrdova',
   },
   'Andorra': {
-    id: '138280',
+    id: '20179',
+    tsdbId: '138280',
     displayName: 'FC Andorra',
     shortName: 'AND',
     crest: '🔵',
@@ -106,7 +114,8 @@ export const HYPER_TEAMS = {
     city: 'Andorra la Vella',
   },
   'Girona': {
-    id: '134700',
+    id: '9812',
+    tsdbId: '134700',
     displayName: 'Girona FC',
     shortName: 'GIR',
     crest: '🔴',
@@ -114,7 +123,8 @@ export const HYPER_TEAMS = {
     city: 'Girona',
   },
   'Granada': {
-    id: '133721',
+    id: '3747',
+    tsdbId: '133721',
     displayName: 'Granada CF',
     shortName: 'GRA',
     crest: '🔴',
@@ -122,23 +132,26 @@ export const HYPER_TEAMS = {
     city: 'Granada',
   },
   'Real Sociedad B': {
-    id: '138160',
+    id: '20983',
+    tsdbId: '138160',
     displayName: 'Real Sociedad B',
-    shortName: 'RSO',
+    shortName: 'RSO2',
     crest: '🔵',
     stadium: 'Zubieta',
     city: 'Donostia',
   },
   'Mallorca': {
-    id: '133733',
+    id: '84',
+    tsdbId: '133733',
     displayName: 'RCD Mallorca',
-    shortName: 'MAL',
+    shortName: 'MLL',
     crest: '🔴',
     stadium: 'Son Moix',
     city: 'Palma',
   },
   'Oviedo': {
-    id: '135455',
+    id: '92',
+    tsdbId: '135455',
     displayName: 'Real Oviedo',
     shortName: 'OVI',
     crest: '🔵',
@@ -146,15 +159,17 @@ export const HYPER_TEAMS = {
     city: 'Oviedo',
   },
   'Sporting': {
-    id: '133723',
+    id: '3788',
+    tsdbId: '133723',
     displayName: 'Real Sporting',
-    shortName: 'SPO',
+    shortName: 'RSG',
     crest: '🔴',
     stadium: 'El Molinón - Enrique Castro Quini',
     city: 'Gijón',
   },
   'Valladolid': {
-    id: '133841',
+    id: '95',
+    tsdbId: '133841',
     displayName: 'Real Valladolid CF',
     shortName: 'VLL',
     crest: '🟣',
@@ -162,7 +177,8 @@ export const HYPER_TEAMS = {
     city: 'Valladolid',
   },
   'Eibar': {
-    id: '134626',
+    id: '3752',
+    tsdbId: '134626',
     displayName: 'SD Eibar',
     shortName: 'EIB',
     crest: '🔴',
@@ -170,7 +186,8 @@ export const HYPER_TEAMS = {
     city: 'Eibar',
   },
   'Almeria': {
-    id: '133817',
+    id: '6832',
+    tsdbId: '133817',
     displayName: 'UD Almería',
     shortName: 'ALM',
     crest: '🔴',
@@ -178,7 +195,8 @@ export const HYPER_TEAMS = {
     city: 'Almeria',
   },
   'Las Palmas': {
-    id: '134259',
+    id: '98',
+    tsdbId: '134259',
     displayName: 'UD Las Palmas',
     shortName: 'LPA',
     crest: '🟡',
@@ -188,16 +206,19 @@ export const HYPER_TEAMS = {
 };
 
 /**
- * Retorna la informació de l'equip pel nom o per l'ID de theSportDB.
- * @param {string} teamIdOrName  ID de theSportDB o nom intern
+ * Retorna la informació de l'equip pel nom intern, nom visible, ID d'ESPN o ID antic de TSDB.
+ * @param {string} teamIdOrName  ID d'ESPN / TSDB o nom intern
  * @returns {object|null}
  */
 export function getTeamInfo(teamIdOrName) {
   if (!teamIdOrName) return null;
+  const str = String(teamIdOrName);
   // Try by direct key (internal name)
-  if (HYPER_TEAMS[teamIdOrName]) return { ...HYPER_TEAMS[teamIdOrName], key: teamIdOrName };
-  // Try by theSportDB ID
-  const entry = Object.entries(HYPER_TEAMS).find(([, t]) => t.id === String(teamIdOrName));
+  if (HYPER_TEAMS[str]) return { ...HYPER_TEAMS[str], key: str };
+  // Try by ESPN ID or legacy TSDB ID or displayName
+  const entry = Object.entries(HYPER_TEAMS).find(
+    ([, t]) => t.id === str || t.tsdbId === str || t.displayName === str
+  );
   if (entry) return { ...entry[1], key: entry[0] };
   return null;
 }

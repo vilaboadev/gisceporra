@@ -94,15 +94,13 @@ CREATE TABLE IF NOT EXISTS hyper_results (
 - Els noms d'equip d'ESPN són en **anglès**. Les dades a Supabase també han d'estar en anglès.
 - Noms de grup: `"Group A"`, `"Group B"`... es normalitzen a `"A"`, `"B"` al codi.
 
-## 🏟️ Dades TheSportDB (Hypermotion)
+## 🏟️ Dades ESPN API (Hypermotion)
 
-- Base URL: `https://www.thesportsdb.com/api/v1/json/3` (clau pública gratuïta "3")
-- Pròxims partits equip: `eventsnext.php?id={teamId}`
-- Últims partits equip: `eventslast.php?id={teamId}`
-- Detalls equip: `lookupteam.php?id={teamId}`
-- Plantilla equip: `lookupteamplayers.php?id={teamId}`
-- Els IDs de theSportDB s'emmagatzemen a `participants.hyper_team_id`
-- `hyper-teams.js` té un mapa de noms → IDs de referència; els admins poden usar directament l'ID numèric
+- Scoreboard: `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/scoreboard` (Spanish LALIGA 2)
+- Standings: `https://site.web.api.espn.com/apis/v2/sports/soccer/esp.2/standings`
+- Equip & Plantilla: `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/teams/{teamId}` i `/roster`
+- Els IDs d'ESPN s'emmagatzemen a `participants.hyper_team_id` (compatibilitat amb IDs anteriors)
+- `hyper-teams.js` té un mapa de noms → IDs d'ESPN de referència per a la Segona Divisió espanyola
 
 ## 🧪 Testing (obligatori)
 
