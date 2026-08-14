@@ -6,7 +6,7 @@
  */
 
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
-import { getTeamInfo, HYPER_TEAMS } from './hyper-teams.js';
+import { getTeamInfo, getTeamBadgeUrl, HYPER_TEAMS } from './hyper-teams.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -112,6 +112,40 @@ export async function fetchEspnLeagueMatches() {
     return events.map(espnEventToHyperMatch).filter(Boolean);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Consulta l'API d'ESPN per obtenir els partits de la jornada actual (tots els 11 partits).
+ * @returns {Promise<{ matchdayNumber: number, matches: Array }>}
+ */
+export async function fetchMatchdayMatches() {
+  try {
+    const matches = await fetchEspnLeagueMatches();
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return { matchdayNumber: 1, matches: [] };
+    }
+
+    const now = Date.now();
+    let targetIndex = matches.findIndex(m => {
+      const matchTime = m.timeMs || (m.dateEvent ? new Date(m.dateEvent).getTime() : 0);
+      return matchTime >= now - 4 * 60 * 60 * 1000;
+    });
+
+    if (targetIndex === -1) {
+      targetIndex = matches.length - 1;
+    }
+
+    const matchdayIndex = Math.floor(targetIndex / 11);
+    const startIndex = matchdayIndex * 11;
+    const matchdayMatches = matches.slice(startIndex, startIndex + 11);
+
+    return {
+      matchdayNumber: matchdayIndex + 1,
+      matches: matchdayMatches,
+    };
+  } catch {
+    return { matchdayNumber: 1, matches: [] };
   }
 }
 
@@ -498,6 +532,29 @@ export function isPredictionLocked(dateStr, timeStr = '00:00:00') {
 
 // ── Renderitzat: Pantalla d'Inici ──────────────────────────────────────────
 
+/**
+ * Genera el HTML d'una secció plegable (collapsible).
+ */
+function renderCollapsibleSection(id, title, contentHtml, defaultOpen = true) {
+  if (!contentHtml) return '';
+  return `<div class="collapsible-section ${defaultOpen ? '' : 'collapsed'}" id="${id}">
+    <div class="collapsible-header" onclick="toggleSection('${id}')">
+      <h3 class="section-h">${title}</h3>
+      <span class="collapse-icon">▼</span>
+    </div>
+    <div class="collapsible-content">
+      ${contentHtml}
+    </div>
+  </div>`;
+}
+
+if (typeof window !== 'undefined') {
+  window.toggleSection = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('collapsed');
+  };
+}
+
 function getMatchStatusBadge(locked, pred, isHypermotion = true) {
   if (!isHypermotion) return '';
   if (locked) {
@@ -524,32 +581,42 @@ function getPredictButton(m, key, locked, pred, isHypermotion = true) {
  * @param {Array}  lastMatches       Últims partits
  * @param {Map}    predictionsByKey  Mapa match_key → predicció de l'usuari
  * @param {string} teamName          Nom intern de l'equip assignat
+ * @param {Array}  standings         Classificació de la lliga
+ * @param {object|Array} matchdayData Objecte { matchdayNumber, matches } o array de partits
  * @returns {string} HTML
  */
-export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByKey = new Map(), teamName = '', standings = []) {
+export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByKey = new Map(), teamName = '', standings = [], matchdayData = {}) {
   const teamInfo = getTeamInfo(teamName);
+  const badgeUrl = getTeamBadgeUrl(teamName);
   const teamLabel = teamInfo?.displayName ?? teamName ?? 'Equip no assignat';
+
+  const matchdayMatches = Array.isArray(matchdayData) ? matchdayData : (matchdayData?.matches ?? []);
+  const matchdayNumStr = matchdayData?.matchdayNumber ? ` ${matchdayData.matchdayNumber}` : '';
+  const matchdayTitle = `Partits de la jornada${matchdayNumStr}`;
 
   let html = '';
 
+  const crestHtml = badgeUrl
+    ? `<img src="${escHtml(badgeUrl)}" alt="${escHtml(teamLabel)}" class="htb-badge-img" style="width:36px;height:36px;object-fit:contain;" />`
+    : `${teamInfo?.crest ?? '⚽'}`;
+
   // Capçalera de l'equip
   html += `<div class="hyper-team-banner card">
-    <div class="htb-crest">${teamInfo?.crest ?? '⚽'}</div>
+    <div class="htb-crest">${crestHtml}</div>
     <div class="htb-info">
-      <div class="htb-name">${teamLabel}</div>
+      <div class="htb-name">${escHtml(teamLabel)}</div>
       <div class="htb-sub muted">El teu equip · Liga Hypermotion</div>
     </div>
   </div>`;
 
-  // Pròxims partits (màx. 4)
+  // 1. Pròxims partits
   const upcomingRaw = nextMatches
     .filter(m => m.dateEvent || m.strDate)
     .slice(0, 4);
 
+  let upcomingHtml = '';
   if (upcomingRaw.length > 0) {
-    html += '<h3 class="section-h">Pròxims partits</h3>';
-    html += '<div class="hyper-matches-grid">';
-    html += upcomingRaw.map(m => {
+    upcomingHtml = '<div class="hyper-matches-grid">' + upcomingRaw.map(m => {
       const key = m.idEvent;
       const matchDate = m.dateEvent || m.strDate || '';
       const pred = predictionsByKey.get(String(key));
@@ -578,18 +645,17 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         </div>
         ${predictBtn}
       </div>`;
-    }).join('');
-    html += '</div>';
+    }).join('') + '</div>';
   } else {
-    html += '<p class="muted">No hi ha pròxims partits disponibles.</p>';
+    upcomingHtml = '<p class="muted">No hi ha pròxims partits disponibles.</p>';
   }
+  html += renderCollapsibleSection('hyper-sec-upcoming', 'Pròxims partits', upcomingHtml, true);
 
-  // Últims resultats
+  // 2. Últims resultats
   const finishedRaw = lastMatches.filter(m => m.intHomeScore != null).slice(0, 5);
+  let finishedHtml = '';
   if (finishedRaw.length > 0) {
-    html += '<h3 class="section-h">Últims resultats</h3>';
-    html += '<div class="hyper-results-grid">';
-    html += finishedRaw.map(m => {
+    finishedHtml = '<div class="hyper-results-grid">' + finishedRaw.map(m => {
       const key = m.idEvent;
       const pred = predictionsByKey.get(String(key));
       const pts = pred ? calculateHyperMatchPoints(
@@ -605,20 +671,21 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
           ${pts !== null ? `<span class="pts-badge ${color}">${pts}</span>` : ''}
         </div>
         <div class="hrc-match">
-          <span class="hrc-team">${m.strHomeTeam}</span>
+          <span class="hrc-team">${escHtml(m.strHomeTeam)}</span>
           <span class="hrc-score">${m.intHomeScore} – ${m.intAwayScore}</span>
-          <span class="hrc-team right">${m.strAwayTeam}</span>
+          <span class="hrc-team right">${escHtml(m.strAwayTeam)}</span>
         </div>
         ${pred ? `<div class="hrc-pred muted">Pronòstic: ${pred.pred_home}–${pred.pred_away}</div>` : ''}
       </div>`;
-    }).join('');
-    html += '</div>';
+    }).join('') + '</div>';
+  } else {
+    finishedHtml = '<p class="muted">No hi ha resultats recents.</p>';
   }
+  html += renderCollapsibleSection('hyper-sec-last', 'Últims resultats', finishedHtml, true);
 
-  // Classificació de la lliga
+  // 3. Classificació de la lliga
   if (standings.length > 0) {
-    html += '<h3 class="section-h">Classificació</h3>';
-    html += `<div class="hyper-standings-card card">
+    const standingsHtml = `<div class="hyper-standings-card card">
       <table class="hyper-standings-table">
         <thead>
           <tr>
@@ -634,8 +701,8 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
         </thead>
         <tbody>
           ${standings.map(row => {
-      const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
-      return `<tr class="${isMine ? 'is-mine' : ''}">
+            const isMine = row.idTeam === (teamInfo?.id ?? '') || row.strTeam === teamLabel;
+            return `<tr class="${isMine ? 'is-mine' : ''}">
               <td class="hst-rank">${row.intRank}</td>
               <td class="hst-team">
                 ${row.strTeamBadge ? `<img class="hst-badge" src="${row.strTeamBadge}" alt="" />` : ''}
@@ -648,10 +715,58 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
               <td class="hst-opt">${row.intGoalDifference}</td>
               <td class="hst-pts">${row.intPoints}</td>
             </tr>`;
-    }).join('')}
+          }).join('')}
         </tbody>
       </table>
     </div>`;
+    html += renderCollapsibleSection('hyper-sec-standings', 'Classificació', standingsHtml, true);
+  }
+
+  // 4. Partits de la jornada (a sota de tot) — llistat informatiu en una sola card
+  if (matchdayMatches && matchdayMatches.length > 0) {
+    const matchdayHtml = `<div class="hyper-matchday-container card">
+      ${matchdayMatches.map(m => {
+        const key = m.idEvent;
+        const pred = predictionsByKey.get(String(key));
+        const dateLabel = formatHyperMatchDate(m.strDate, m.strTime);
+
+        const homeBadge = m.strHomeBadge || getTeamBadgeUrl(m.idHomeTeam || m.strHomeTeam);
+        const awayBadge = m.strAwayBadge || getTeamBadgeUrl(m.idAwayTeam || m.strAwayTeam);
+
+        const isFinished = m.intHomeScore != null;
+        const pts = (isFinished && pred) ? calculateHyperMatchPoints(
+          { pred_home: pred.pred_home, pred_away: pred.pred_away },
+          { home_goals: Number(m.intHomeScore), away_goals: Number(m.intAwayScore) }
+        ) : null;
+        const color = pts !== null ? getHyperBadgeColor(pts) : '';
+
+        return `<div class="hmc-row">
+          <div class="hmc-row-header">
+            <span class="hmc-date muted">${dateLabel}</span>
+            ${isFinished && pts !== null ? `<span class="pts-badge ${color}">${pts} pts</span>` : ''}
+          </div>
+          <div class="hmc-row-main">
+            <div class="hmc-team-box home">
+              ${homeBadge ? `<img src="${escHtml(homeBadge)}" alt="" class="hmc-badge" />` : ''}
+              <span class="hmc-team-name">${escHtml(m.strHomeTeam)}</span>
+            </div>
+            <div class="hmc-score-box">
+              ${isFinished
+                ? `<span class="hmc-score-num">${m.intHomeScore} – ${m.intAwayScore}</span>`
+                : `<span class="hmc-vs">vs</span>`
+              }
+            </div>
+            <div class="hmc-team-box away">
+              <span class="hmc-team-name">${escHtml(m.strAwayTeam)}</span>
+              ${awayBadge ? `<img src="${escHtml(awayBadge)}" alt="" class="hmc-badge" />` : ''}
+            </div>
+          </div>
+          ${pred ? `<div class="hmc-row-pred muted">El teu pronòstic: ${pred.pred_home}–${pred.pred_away}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+    html += renderCollapsibleSection('hyper-sec-matchday', matchdayTitle, matchdayHtml, true);
   }
 
   return html;
