@@ -20,7 +20,7 @@ import {
   isPredictionLocked,
 } from './hyper.js';
 import { calculateHyperUserTotal } from './hyper-scoring.js';
-import { getTeamInfo } from './hyper-teams.js';
+import { getTeamInfo, getTeamBadgeUrl } from './hyper-teams.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -297,7 +297,7 @@ async function loadHyperRanking(force = false) {
     }
 
     const [participRes, predsRes, resultsRes] = await Promise.all([
-      db.from('participants').select('username, display_name, hyper_team_id').eq('porra_hyper', true),
+      db.from('participants').select('username, display_name, hyper_team_id, avatar_url, nickname').eq('porra_hyper', true),
       db.from('hyper_predictions').select('*'),
       db.from('hyper_results').select('*'),
     ]);
@@ -314,8 +314,9 @@ async function loadHyperRanking(force = false) {
       const points = calculateHyperUserTotal(preds, results);
       return {
         username: p.username,
-        displayName: p.display_name,
+        displayName: p.nickname || p.display_name || p.username,
         teamName: p.hyper_team_id ?? '',
+        avatarUrl: p.avatar_url ?? '',
         points,
         predictions: preds,
         results,
@@ -377,6 +378,7 @@ function loadHyperProfile() {
   if (!user) return;
 
   const teamInfo = getTeamInfo(user.hyper_team_id ?? '');
+  const badgeUrl = getTeamBadgeUrl(user.hyper_team_id ?? '');
   const crest = teamInfo?.crest ?? '⚽';
 
   // Validate avatar URL — only allow http(s) URLs
@@ -391,12 +393,22 @@ function loadHyperProfile() {
             ? `<img src="${escHtml(safeAvatarUrl)}" alt="Avatar" class="hp-avatar-img" />`
             : `<span class="hp-avatar-initials">${escHtml(user.username.slice(0,2))}</span>`
           }
-          <span class="hp-crest-overlay">${crest}</span>
+          <span class="hp-crest-overlay">
+            ${badgeUrl
+              ? `<img src="${escHtml(badgeUrl)}" alt="" class="hp-crest-img" />`
+              : `<span>${crest}</span>`
+            }
+          </span>
         </div>
       </div>
 
       <div class="hp-team-info card">
-        <div class="hp-team-crest">${crest}</div>
+        <div class="hp-team-crest">
+          ${badgeUrl
+            ? `<img src="${escHtml(badgeUrl)}" alt="" class="hp-crest-img" style="width:36px;height:36px;object-fit:contain;" />`
+            : crest
+          }
+        </div>
         <div>
           <div class="hp-team-name">${escHtml(teamInfo?.displayName ?? user.hyper_team_id ?? 'Sense equip')}</div>
           <div class="hp-team-stadium muted">${escHtml(teamInfo?.stadium ?? '')}</div>
@@ -505,6 +517,7 @@ function updateHyperHeader() {
   const user = getUser();
   if (!user) return;
   const teamInfo = getTeamInfo(user.hyper_team_id ?? '');
+  const badgeUrl = getTeamBadgeUrl(user.hyper_team_id ?? '');
   const crest = teamInfo?.crest ?? '';
 
   const initialsEl = $('hyper-avatar')?.querySelector('.ha-initials');
@@ -527,7 +540,13 @@ function updateHyperHeader() {
       initialsEl.style.background = '';
     }
   }
-  if (crestEl) crestEl.textContent = crest;
+  if (crestEl) {
+    if (badgeUrl) {
+      crestEl.innerHTML = `<img src="${escHtml(badgeUrl)}" alt="" class="ha-crest-img" />`;
+    } else {
+      crestEl.textContent = crest;
+    }
+  }
   if (labelEl) labelEl.textContent = user.nickname || user.display_name || user.username;
 }
 

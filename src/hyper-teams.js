@@ -236,3 +236,4 @@ export function getTeamBadgeUrl(teamIdOrName) {
   if (!info || !info.id) return null;
   return `https://a.espncdn.com/i/teamlogos/soccer/500/${info.id}.png`;
 }
+
