@@ -162,3 +162,28 @@ test('fetchHyperStandings obte i transforma la classificacio d’ESPN', async ()
     globalThis.fetch = originalFetch;
   }
 });
+
+test('hyperInfoHtml inclou seccions plegables i partits de la jornada a sota de tot', async () => {
+  const { hyperInfoHtml } = await import('../src/hyper.js');
+
+  const matchdayMatches = [
+    {
+      idEvent: '999',
+      strHomeTeam: 'Albacete',
+      strAwayTeam: 'Eibar',
+      idHomeTeam: '2737',
+      idAwayTeam: '3752',
+      strDate: '2026-08-15',
+      strTime: '18:00:00',
+    }
+  ];
+
+  const html = hyperInfoHtml([], [], new Map(), 'Albacete', [], matchdayMatches);
+
+  assert.ok(html.includes('collapsible-section'), 'Ha de incloure seccions plegables');
+  assert.ok(html.includes('hyper-sec-upcoming'), 'Ha de incloure la secció Pròxims partits');
+  assert.ok(html.includes('hyper-sec-matchday'), 'Ha de incloure la secció Partits de la jornada');
+  assert.ok(html.includes('Partits de la jornada'), 'Ha de contenir el títol Partits de la jornada');
+  assert.ok(html.includes('Albacete'), 'Ha de mostrar l’equip local dels partits de la jornada');
+  assert.ok(html.includes('Eibar'), 'Ha de mostrar l’equip visitant dels partits de la jornada');
+});

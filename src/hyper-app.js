@@ -8,6 +8,7 @@
 import {
   fetchTeamNextMatches,
   fetchTeamLastMatches,
+  fetchMatchdayMatches,
   fetchTeamDetails,
   fetchTeamPlayers,
   fetchHyperStandings,
@@ -128,7 +129,7 @@ async function loadHyperInfo(force = false) {
 
   // Si tenim cache vàlid de la pantalla d'inici (< 2 minuts) del mateix equip, renderitzem a l'instant
   if (!force && hyperInfoCache && hyperInfoCache.teamId === teamId && (now - hyperInfoCache.timestamp < 2 * 60 * 1000)) {
-    renderHyperInfo(el, hyperInfoCache.nextMatches, hyperInfoCache.lastMatches, hyperInfoCache.predMap, teamId, hyperInfoCache.standings);
+    renderHyperInfo(el, hyperInfoCache.nextMatches, hyperInfoCache.lastMatches, hyperInfoCache.predMap, teamId, hyperInfoCache.standings, hyperInfoCache.matchdayMatches);
     return;
   }
 
@@ -137,7 +138,7 @@ async function loadHyperInfo(force = false) {
   }
 
   try {
-    const [nextMatches, lastMatches, standings, predMap] = await Promise.all([
+    const [nextMatches, lastMatches, standings, predMap, matchdayMatches] = await Promise.all([
       fetchTeamNextMatches(teamId).catch(() => []),
       fetchTeamLastMatches(teamId).catch(() => []),
       fetchHyperStandings('4400').catch(() => []),
@@ -151,6 +152,7 @@ async function loadHyperInfo(force = false) {
         }
         return hyperPredCache ?? new Map();
       })(),
+      fetchMatchdayMatches().catch(() => ({ matchdayNumber: 1, matches: [] })),
     ]);
 
     hyperInfoCache = {
@@ -159,17 +161,18 @@ async function loadHyperInfo(force = false) {
       lastMatches,
       standings,
       predMap,
+      matchdayMatches,
       timestamp: Date.now(),
     };
 
-    renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings);
+    renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings, matchdayMatches);
   } catch (err) {
     showError(el, err.message);
   }
 }
 
-function renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings) {
-  el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, teamId, standings);
+function renderHyperInfo(el, nextMatches, lastMatches, predMap, teamId, standings, matchdayMatches = []) {
+  el.innerHTML = hyperInfoHtml(nextMatches, lastMatches, predMap, teamId, standings, matchdayMatches);
 
   // Connectar botons "Predir resultat"
   el.querySelectorAll('.hyper-predict-btn').forEach(btn => {
