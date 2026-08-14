@@ -225,3 +225,15 @@ export function getTeamInfo(teamIdOrName) {
 
 /** Llista de noms interns dels equips (per als selectors d'admin). */
 export const HYPER_TEAM_NAMES = Object.keys(HYPER_TEAMS);
+
+/**
+ * Retorna l'URL de l'escut oficial de l'API d'ESPN per a l'equip.
+ * @param {string} teamIdOrName  Nom intern, nom visible, ID d'ESPN o ID antic de TSDB
+ * @returns {string|null}
+ */
+export function getTeamBadgeUrl(teamIdOrName) {
+  const info = getTeamInfo(teamIdOrName);
+  if (!info || !info.id) return null;
+  return `https://a.espncdn.com/i/teamlogos/soccer/500/${info.id}.png`;
+}
+

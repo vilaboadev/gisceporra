@@ -6,7 +6,7 @@
  */
 
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
-import { getTeamInfo, HYPER_TEAMS } from './hyper-teams.js';
+import { getTeamInfo, getTeamBadgeUrl, HYPER_TEAMS } from './hyper-teams.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -528,13 +528,18 @@ function getPredictButton(m, key, locked, pred, isHypermotion = true) {
  */
 export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByKey = new Map(), teamName = '', standings = []) {
   const teamInfo = getTeamInfo(teamName);
+  const badgeUrl = getTeamBadgeUrl(teamName);
   const teamLabel = teamInfo?.displayName ?? teamName ?? 'Equip no assignat';
 
   let html = '';
 
+  const crestHtml = badgeUrl
+    ? `<img src="${escHtml(badgeUrl)}" alt="${escHtml(teamLabel)}" class="htb-badge-img" style="width:36px;height:36px;object-fit:contain;" />`
+    : `${teamInfo?.crest ?? '⚽'}`;
+
   // Capçalera de l'equip
   html += `<div class="hyper-team-banner card">
-    <div class="htb-crest">${teamInfo?.crest ?? '⚽'}</div>
+    <div class="htb-crest">${crestHtml}</div>
     <div class="htb-info">
       <div class="htb-name">${teamLabel}</div>
       <div class="htb-sub muted">El teu equip · Liga Hypermotion</div>
@@ -660,8 +665,40 @@ export function hyperInfoHtml(nextMatches = [], lastMatches = [], predictionsByK
 // ── Renderitzat: Pantalla de Classificació ─────────────────────────────────
 
 /**
+ * Genera l'HTML de l'avatar d'un usuari amb la imatge/inicials i l'escut de l'API.
+ * @param {object} params
+ * @param {string} params.username
+ * @param {string} [params.avatarUrl]
+ * @param {string} [params.teamName]
+ * @returns {string}
+ */
+export function hyperAvatarHtml({ username = '', avatarUrl = '', teamName = '' } = {}) {
+  const rawAvatarUrl = avatarUrl ?? '';
+  const safeAvatarUrl = /^https?:\/\//.test(rawAvatarUrl) ? rawAvatarUrl : '';
+  const initials = (username || '').slice(0, 2);
+  const teamInfo = getTeamInfo(teamName);
+  const badgeUrl = getTeamBadgeUrl(teamName);
+  const fallbackCrest = teamInfo?.crest ?? '';
+
+  const avatarContentHtml = safeAvatarUrl
+    ? `<img src="${escHtml(safeAvatarUrl)}" alt="avatar" class="ha-avatar-img" />`
+    : escHtml(initials);
+
+  const crestBadgeHtml = badgeUrl
+    ? `<img src="${escHtml(badgeUrl)}" alt="" class="ha-crest-img" />`
+    : fallbackCrest;
+
+  const bgStyle = safeAvatarUrl ? ' style="background:var(--card-bg, #12141c);"' : '';
+
+  return `<div class="avatar hyper-avatar-wrap">
+    <div class="ha-initials"${bgStyle}>${avatarContentHtml}</div>
+    <div class="ha-crest">${crestBadgeHtml}</div>
+  </div>`;
+}
+
+/**
  * Genera el HTML de la classificació Hypermotion.
- * @param {Array<{ username, displayName, teamName, points }>} ranking
+ * @param {Array<{ username, displayName, teamName, avatarUrl, points }>} ranking
  * @param {string} currentUsername
  * @returns {string}
  */
@@ -675,11 +712,16 @@ export function hyperRankingHtml(ranking = [], currentUsername = '') {
   ranking.forEach((entry, i) => {
     const isMe = entry.username === currentUsername;
     const teamInfo = getTeamInfo(entry.teamName);
-    const crest = teamInfo?.crest ?? '⚽';
     const medal = i < 3 ? medals[i] : '';
+    const avatarHtml = hyperAvatarHtml({
+      username: entry.username,
+      avatarUrl: entry.avatarUrl ?? entry.avatar_url,
+      teamName: entry.teamName
+    });
+
     html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}">
       <span class="hri-pos">${medal || (i + 1)}</span>
-      <span class="hri-crest">${crest}</span>
+      ${avatarHtml}
       <div class="hri-info">
         <span class="hri-name">${entry.displayName || entry.username}</span>
         <span class="hri-team muted">${teamInfo?.displayName ?? entry.teamName ?? ''}</span>
@@ -697,7 +739,7 @@ export function hyperRankingHtml(ranking = [], currentUsername = '') {
 
 /**
  * Genera el HTML de la classificació amb el detall de partits de cada jugador.
- * @param {Array<{username, displayName, teamName, predictions: Array, results: Array}>} entries
+ * @param {Array<{username, displayName, teamName, avatarUrl, predictions: Array, results: Array}>} entries
  * @param {string} currentUsername
  * @param {number} nowMs  Timestamp actual (per detectar si un partit ja va passar la finestra)
  * @returns {string}
@@ -718,8 +760,12 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
   sorted.forEach((entry, i) => {
     const isMe = entry.username === currentUsername;
     const teamInfo = getTeamInfo(entry.teamName);
-    const crest = teamInfo?.crest ?? '⚽';
     const medal = i < 3 ? medals[i] : '';
+    const avatarHtml = hyperAvatarHtml({
+      username: entry.username,
+      avatarUrl: entry.avatarUrl ?? entry.avatar_url,
+      teamName: entry.teamName
+    });
 
     // Partits: mostra les prediccions un cop passada la finestra (1h) o acabats
     const visibleMatches = (entry.predictions ?? []).filter(pred => {
@@ -751,7 +797,7 @@ export function hyperRankingDetailedHtml(entries = [], currentUsername = '', now
 
     html += `<div class="hyper-rank-item ${isMe ? 'is-me' : ''}" onclick="toggleHyperPlayerPronos('${entry.username}')">
       <span class="hri-pos">${medal || (i + 1)}</span>
-      <span class="hri-crest">${crest}</span>
+      ${avatarHtml}
       <div class="hri-info">
         <span class="hri-name">${entry.displayName || entry.username}</span>
         <span class="hri-team muted">${teamInfo?.displayName ?? entry.teamName ?? ''}</span>
@@ -784,7 +830,7 @@ export function hyperClubHtml(tsdbTeam = null, teamName = '', players = []) {
   const stadium = localInfo?.stadium ?? tsdbTeam?.strStadium ?? '–';
   const location = tsdbTeam?.strLocation ?? localInfo?.city ?? '–';
   const country = 'Espanya';
-  const badgeUrl = tsdbTeam?.strBadge ?? '';
+  const badgeUrl = tsdbTeam?.strBadge || getTeamBadgeUrl(teamName) || '';
   const crest = localInfo?.crest ?? '⚽';
   const accent = tsdbTeam?.strColour1 ?? null;
   const abbreviation = tsdbTeam?.strAbbreviation ?? localInfo?.shortName ?? '';
