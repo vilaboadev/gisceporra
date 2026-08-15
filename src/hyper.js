@@ -185,6 +185,44 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
   return freshData;
 }
 
+/**
+ * Sincronitza els resultats finalitzats d'ESPN a la taula `hyper_results` de Supabase.
+ * @param {object} dbClient Client de Supabase
+ * @returns {Promise<boolean>}
+ */
+export async function syncHyperResults(dbClient) {
+  if (!dbClient) return false;
+  try {
+    const matches = await fetchEspnLeagueMatches();
+    if (!Array.isArray(matches) || matches.length === 0) return false;
+
+    const finishedMatches = matches.filter(m => m.intHomeScore != null && m.intAwayScore != null);
+    if (finishedMatches.length === 0) return false;
+
+    const rowsToUpsert = finishedMatches.map(m => ({
+      match_key: String(m.idEvent),
+      home_team: m.strHomeTeam,
+      away_team: m.strAwayTeam,
+      home_goals: parseInt(m.intHomeScore, 10),
+      away_goals: parseInt(m.intAwayScore, 10),
+      match_date: m.strDate || null,
+    }));
+
+    const { error } = await dbClient
+      .from('hyper_results')
+      .upsert(rowsToUpsert, { onConflict: 'match_key' });
+
+    if (error) {
+      console.error('Error sincronitzant hyper_results des d’ESPN:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Error en syncHyperResults:', err);
+    return false;
+  }
+}
+
 export async function getLeagueLastEventsCache(allTeamIds, options = {}) {
   return getLeagueEventsCache(allTeamIds, options);
 }

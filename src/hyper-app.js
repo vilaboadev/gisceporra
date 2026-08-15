@@ -18,6 +18,7 @@ import {
   hyperHowToHtml,
   hyperPredictFormHtml,
   isPredictionLocked,
+  syncHyperResults,
 } from './hyper.js';
 import { calculateHyperUserTotal } from './hyper-scoring.js';
 import { getTeamInfo, getTeamBadgeUrl } from './hyper-teams.js';
@@ -296,6 +297,9 @@ async function loadHyperRanking(force = false) {
       return;
     }
 
+    // Sincronitzar resultats finalitzats d'ESPN a Supabase (hyper_results)
+    await syncHyperResults(db);
+
     const [participRes, predsRes, resultsRes] = await Promise.all([
       db.from('participants').select('username, display_name, hyper_team_id, avatar_url, nickname').eq('porra_hyper', true),
       db.from('hyper_predictions').select('*'),
@@ -319,7 +323,7 @@ async function loadHyperRanking(force = false) {
         avatarUrl: p.avatar_url ?? '',
         points,
         predictions: preds,
-        results,
+        results: allResults,
       };
     });
 
