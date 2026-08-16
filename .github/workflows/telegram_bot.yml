@@ -1,0 +1,41 @@
+name: Telegram Bot – Lligueta de 2a Divisió
+
+on:
+  # Execució automàtica: divendres a les 19:00 UTC (21:00 CEST) – pre-jornada
+  schedule:
+    - cron: "0 19 * * 5"
+  # Permet llançar el bot manualment des de la UI de GitHub
+  workflow_dispatch:
+    inputs:
+      round_number:
+        description: "Número de jornada (buit = detecció automàtica)"
+        required: false
+        default: ""
+
+jobs:
+  send-preview:
+    name: Enviar missatge pre-jornada
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repositori
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instal·lar dependències
+        run: pip install -r bot/requirements.txt
+
+      - name: Executar el bot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ROUND_NUMBER: ${{ github.event.inputs.round_number }}
+        run: python bot/bot.py
