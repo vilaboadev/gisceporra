@@ -2,16 +2,29 @@
 bot.py – Bot de Telegram per a la Lligueta de 2a Divisió (Hypermotion).
 
 Modes:
-  previa      – missatge de prèvia de jornada (per defecte)
-  postjornada – missatge de resultats i punts de la jornada
+  auto        – detecció automàtica (per defecte): comprova si cal enviar prèvia
+                o post-jornada basant-se en les dates dels partits de Supabase
+  previa      – força el missatge de prèvia de jornada
+  postjornada – força el missatge de resultats i punts de la jornada
+
+Lògica automàtica (mode "auto"):
+  - Cada dia el workflow executa el bot en mode "auto".
+  - El bot detecta la jornada pròxima (partits sense resultat) i la acabada
+    (tots els partits amb resultat).
+  - Envia la PRÈVIA si el primer partit de la jornada comença AVUI o DEMÀ.
+  - Envia el POST-JORNADA si l'últim partit de la jornada va acabar AHIR o ABANS
+    i tots els partits de la jornada tenen resultat.
+  - Safeguard: comprova la taula ``bot_sent_messages`` a Supabase per evitar
+    enviar el mateix missatge més d'una vegada per jornada.
 
 Variables d'entorn (GitHub Secrets o .env):
   SUPABASE_URL          – URL del projecte Supabase  (compartit amb l'app web)
   SUPABASE_KEY          – clau anon/service_role      (compartit amb l'app web)
   TELEGRAM_BOT_TOKEN    – token del bot (@BotFather)
   TELEGRAM_CHAT_ID      – ID del grup / canal de Telegram
-  BOT_MODE              – "previa" o "postjornada" (defecte: "previa")
+  BOT_MODE              – "auto" | "previa" | "postjornada" (defecte: "auto")
   ROUND_NUMBER          – (opcional) número de jornada; si buit, detecció automàtica
+  FORCE_SEND            – "true" per saltar el safeguard de duplicats
 """
 
 from __future__ import annotations
@@ -20,6 +33,7 @@ import os
 import sys
 import logging
 import requests
+from datetime import date, timedelta
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -46,8 +60,9 @@ SUPABASE_URL       = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY       = os.environ.get("SUPABASE_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-BOT_MODE           = os.environ.get("BOT_MODE", "previa").strip().lower()
+BOT_MODE           = os.environ.get("BOT_MODE", "auto").strip().lower()
 ROUND_NUMBER       = os.environ.get("ROUND_NUMBER", "").strip()
+FORCE_SEND         = os.environ.get("FORCE_SEND", "false").strip().lower() == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +78,7 @@ def get_supabase_client() -> Client:
 # ---------------------------------------------------------------------------
 # Obtenció de dades
 # ---------------------------------------------------------------------------
-def fetch_current_round(client: Client) -> int:
+def fetch_current_round(client: Client, mode: str) -> int:
     """Detecta la jornada en curs o retorna ROUND_NUMBER si s'ha especificat."""
     if ROUND_NUMBER:
         try:
@@ -72,7 +87,7 @@ def fetch_current_round(client: Client) -> int:
             pass
 
     # Jornada mínima sense resultats (per a la prèvia)
-    if BOT_MODE == "previa":
+    if mode == "previa":
         resp = (
             client.table("hyper_results")
             .select("match_key")
@@ -100,6 +115,119 @@ def fetch_current_round(client: Client) -> int:
 
     log.warning("No s'ha pogut detectar la jornada automàticament. S'usarà jornada 1.")
     return 1
+
+
+def _parse_match_date(match: dict) -> date | None:
+    """Extreu i parseja match_date (format 'YYYY-MM-DD' o 'YYYY-MM-DDTHH:MM:SS') d'un partit."""
+    raw = (match.get("match_date") or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _round_number_from_key(match_key: str) -> int | None:
+    """Extreu el número de jornada d'un match_key amb format '{n}_...'."""
+    parts = match_key.split("_")
+    if parts[0].isdigit():
+        return int(parts[0])
+    return None
+
+
+def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
+    """
+    Mode "auto": analitza les dates dels partits i retorna la llista de
+    missatges a enviar com a [(mode, round_number), ...].
+
+    Lògica:
+      - PRÈVIA: la jornada amb el primer partit sense resultat comença avui o demà
+      - POST-JORNADA: la jornada amb tots els partits amb resultat ha acabat
+        i l'últim partit va ser ahir o abans
+    """
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    yesterday = today - timedelta(days=1)
+
+    resp = (
+        client.table("hyper_results")
+        .select("match_key, match_date, home_goals, away_goals")
+        .order("match_key")
+        .execute()
+    )
+    all_matches = resp.data or []
+
+    # Agrupar per jornada
+    rounds: dict[int, list[dict]] = {}
+    for m in all_matches:
+        rn = _round_number_from_key(m.get("match_key", ""))
+        if rn is not None:
+            rounds.setdefault(rn, []).append(m)
+
+    actions: list[tuple[str, int]] = []
+
+    for rn, matches in sorted(rounds.items()):
+        has_results = all(
+            m.get("home_goals") is not None and m.get("away_goals") is not None
+            for m in matches
+        )
+        no_results = all(
+            m.get("home_goals") is None
+            for m in matches
+        )
+        dates = [_parse_match_date(m) for m in matches]
+        valid_dates = [d for d in dates if d is not None]
+
+        if not valid_dates:
+            continue
+
+        first_match_date = min(valid_dates)
+        last_match_date = max(valid_dates)
+
+        # Prèvia: jornada pendent + primer partit avui o demà
+        if no_results and first_match_date in (today, tomorrow):
+            actions.append(("previa", rn))
+
+        # Post-jornada: tots els partits resolts + l'últim va ser ahir o abans
+        if has_results and last_match_date <= yesterday:
+            actions.append(("postjornada", rn))
+
+    return actions
+
+
+# ---------------------------------------------------------------------------
+# Safeguard contra duplicats
+# ---------------------------------------------------------------------------
+
+def already_sent(client: Client, round_number: int, mode: str) -> bool:
+    """Comprova si ja s'ha enviat el missatge per a aquesta jornada i mode."""
+    if FORCE_SEND:
+        return False
+    try:
+        resp = (
+            client.table("bot_sent_messages")
+            .select("id")
+            .eq("jornada", round_number)
+            .eq("mode", mode)
+            .limit(1)
+            .execute()
+        )
+        return bool(resp.data)
+    except Exception as exc:
+        log.warning("No s'ha pogut consultar bot_sent_messages: %s. Es continuarà.", exc)
+        return False
+
+
+def mark_sent(client: Client, round_number: int, mode: str) -> None:
+    """Registra que s'ha enviat el missatge per a aquesta jornada i mode."""
+    try:
+        client.table("bot_sent_messages").insert(
+            {"jornada": round_number, "mode": mode},
+        ).execute()
+        log.info("Registrat enviament: jornada=%s mode=%s", round_number, mode)
+    except Exception as exc:
+        log.warning("No s'ha pogut registrar a bot_sent_messages: %s", exc)
 
 
 def fetch_matches(client: Client, round_number: int) -> list[dict]:
@@ -255,18 +383,16 @@ def send_telegram_message(text: str) -> None:
 # ---------------------------------------------------------------------------
 # Punt d'entrada principal
 # ---------------------------------------------------------------------------
-def main() -> None:
-    log.info("Iniciant bot de la Lligueta de 2a Divisió (mode: %s)…", BOT_MODE)
-
-    client = get_supabase_client()
-
-    round_number = fetch_current_round(client)
-    log.info("Jornada detectada: %s", round_number)
+def _send_for_round(client: Client, mode: str, round_number: int) -> None:
+    """Genera i envia el missatge per a una jornada i mode concret."""
+    if already_sent(client, round_number, mode):
+        log.info("Missatge '%s' jornada %s ja enviat. Saltant.", mode, round_number)
+        return
 
     matches = fetch_matches(client, round_number)
     if not matches:
         log.warning("No s'han trobat partits per a la jornada %s.", round_number)
-        sys.exit(0)
+        return
 
     participants = fetch_participants(client)
     log.info("Participants carregats: %d", len(participants))
@@ -274,12 +400,9 @@ def main() -> None:
     rankings = fetch_rankings(client)
     log.info("Classificació carregada: %d jugadors", len(rankings))
 
-    if BOT_MODE == "postjornada":
+    if mode == "postjornada":
         predictions = fetch_predictions_for_round(client, round_number)
         log.info("Prediccions carregades: %d", len(predictions))
-        # Per al post-jornada necessitem la classificació abans i després;
-        # com que no emmagatzemem snapshots, passem rankings com a "after"
-        # i calculem la "before" restant els punts guanyats aquesta jornada.
         rankings_before = _compute_rankings_before(rankings, matches, predictions)
         message = format_postjornada_message(
             round_number, matches, participants,
@@ -290,6 +413,28 @@ def main() -> None:
 
     log.info("Missatge generat (%d caràcters).", len(message))
     send_telegram_message(message)
+    mark_sent(client, round_number, mode)
+
+
+def main() -> None:
+    log.info("Iniciant bot de la Lligueta de 2a Divisió (mode: %s)…", BOT_MODE)
+
+    client = get_supabase_client()
+
+    if BOT_MODE == "auto":
+        # Detecció intel·ligent: envia prèvia/post-jornada segons les dates
+        actions = detect_what_to_send(client)
+        if not actions:
+            log.info("Mode auto: cap missatge a enviar avui.")
+            return
+        for mode, round_number in actions:
+            log.info("Mode auto → enviant '%s' per jornada %s", mode, round_number)
+            _send_for_round(client, mode, round_number)
+    else:
+        # Mode explicit (previa / postjornada)
+        round_number = fetch_current_round(client, BOT_MODE)
+        log.info("Jornada detectada: %s", round_number)
+        _send_for_round(client, BOT_MODE, round_number)
 
 
 def _compute_rankings_before(

@@ -15,7 +15,21 @@ ALTER TABLE participants
 
 
 -- -----------------------------------------------------------------------------
--- 2. Vista `hyper_clasificacion`
+-- 2. Taula `bot_sent_messages`
+--    Safeguard contra duplicats: registra els missatges enviats per jornada i mode.
+--    Evita enviar més d'un missatge de prèvia o post-jornada per jornada.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bot_sent_messages (
+  id      SERIAL      PRIMARY KEY,
+  jornada INTEGER     NOT NULL,
+  mode    TEXT        NOT NULL CHECK (mode IN ('previa', 'postjornada')),
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (jornada, mode)
+);
+
+
+-- -----------------------------------------------------------------------------
+-- 3. Vista `hyper_clasificacion`
 --    Classificació Hypermotion calculada en temps real des de les prediccions
 --    i els resultats. El bot la consulta per obtenir els punts de cada jugador.
 --
@@ -54,7 +68,7 @@ ORDER BY puntos DESC;
 
 
 -- -----------------------------------------------------------------------------
--- 3. Vista `bot_jornada_view`
+-- 4. Vista `bot_jornada_view`
 --    Creuament de partits, participants i prediccions per jornada.
 --    El bot la pot usar per generar els missatges sense fer múltiples crides.
 -- -----------------------------------------------------------------------------
@@ -102,7 +116,7 @@ LEFT JOIN hyper_predictions hp_a
 
 
 -- -----------------------------------------------------------------------------
--- 4. Taula `bot_message_templates`
+-- 5. Taula `bot_message_templates`
 --    Plantilles de text editables des de Supabase per personalitzar els
 --    missatges del bot sense haver de modificar el codi.
 --
