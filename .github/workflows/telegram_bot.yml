@@ -1,20 +1,29 @@
 name: Telegram Bot – Lligueta de 2a Divisió
 
 on:
-  # Execució automàtica: divendres a les 19:00 UTC (21:00 CEST) – pre-jornada
+  # Prèvia automàtica: divendres a les 19:00 UTC (21:00 CEST), abans de la jornada
   schedule:
-    - cron: "0 19 * * 5"
-  # Permet llançar el bot manualment des de la UI de GitHub
+    - cron: "0 19 * * 5"   # previa
+    - cron: "0 22 * * 0"   # postjornada: diumenge a les 22:00 UTC (mitjanit CEST)
+  # Llançament manual amb selecció de mode i jornada
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Mode: previa o postjornada"
+        required: true
+        default: "previa"
+        type: choice
+        options:
+          - previa
+          - postjornada
       round_number:
         description: "Número de jornada (buit = detecció automàtica)"
         required: false
         default: ""
 
 jobs:
-  send-preview:
-    name: Enviar missatge pre-jornada
+  send-message:
+    name: Enviar missatge (${{ github.event.inputs.mode || 'scheduled' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,11 +40,34 @@ jobs:
       - name: Instal·lar dependències
         run: pip install -r bot/requirements.txt
 
-      - name: Executar el bot
+      - name: Executar el bot (prèvia – cron divendres)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 19 * * 5'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_MODE: previa
+        run: python bot/bot.py
+
+      - name: Executar el bot (post-jornada – cron diumenge)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 22 * * 0'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_MODE: postjornada
+        run: python bot/bot.py
+
+      - name: Executar el bot (manual)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOT_MODE: ${{ github.event.inputs.mode }}
           ROUND_NUMBER: ${{ github.event.inputs.round_number }}
         run: python bot/bot.py
+

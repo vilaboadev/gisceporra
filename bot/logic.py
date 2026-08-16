@@ -5,9 +5,25 @@ Funcions pures (sense efectes secundaris) per detectar:
   - Duels directes entre companys de la lligueta
   - Derbis geogràfics
   - Context de classificació (líder vs cuer, rivals directes…)
+  - Missatges de pre-jornada i post-jornada
+
+Format dels participants:
+  username, display_name, hyper_team_id, telegram_handle (ex: "@pere")
+
+Format dels partits (matches):
+  home_team, away_team, match_date, match_time,
+  home_goals (None si no jugat), away_goals (None si no jugat)
+
+Format de les prediccions (predictions):
+  username, match_key, pred_home, pred_away
+
+Format dels rankings:
+  username, display_name, hyper_team_id, puntos
 """
 
 from __future__ import annotations
+
+import random
 
 # ---------------------------------------------------------------------------
 # Mapa de comunitats autònomes per a cada equip de la 2a Divisió
@@ -41,63 +57,108 @@ TEAM_REGION: dict[str, str] = {
 # Missatges de troleo per a derbis regionals, indexats per comunitat
 DERBY_TAUNTS: dict[str, list[str]] = {
     "Andalusia": [
-        "⚠️ DERBI ANDALÚS! Qui porta el millor flamenc al camp? 💃",
-        "🌞 Sol, platja i tres punts. El que perd, la rodada de tapes la paga.",
+        "Duelo andalús d'urgències. El que perd, la rodada de tapes la paga.",
+        "Sol, platja i tres punts. Qui porta el millor flamenc al camp? 💃",
     ],
     "País Basc": [
-        "⚠️ DERBI BASC! Txakoli a punt per celebrar. Aupa!",
-        "🌧️ Meritxell o Ainhoa, avui la ikurriña té un sol color preferit.",
+        "Derbi basc! Txakoli a punt per celebrar. Aupa!",
+        "La ikurriña té un sol color preferit avui vespre.",
     ],
     "Astúries": [
-        "⚠️ DERBI ASTURIÀ! El carbó encén les passions al Principat.",
-        "🍏 Sidra i punts: només n'hi ha prou per a un dels dos. Salut!",
+        "Derbi asturià! El carbó encén les passions al Principat.",
+        "Sidra i punts: només n'hi ha prou per a un dels dos. Salut! 🍏",
     ],
     "Catalunya": [
-        "⚠️ DERBI CATALÀ! La pedrera contra el camp gran. Forza!",
-        "🌹 La Rosa de Sant Jordi va per als tres punts, no per dividir-los.",
+        "Derbi català! La pedrera contra el camp gran. Forza!",
+        "La Rosa de Sant Jordi va per als tres punts, no per dividir-los.",
     ],
     "Canàries": [
-        "⚠️ DERBI CANARI! Tenerife vs Gran Canaria: l'etern volcà enfront de la duna.",
-        "🌋 Qui guanya governa l'arxipèlag futbolístic per una setmana més.",
+        "Derbi canari! Tenerife vs Gran Canaria: l'etern volcà enfront de la duna. 🌋",
+        "Qui guanya governa l'arxipèlag futbolístic per una setmana més.",
     ],
     "Castella i Lleó": [
-        "⚠️ DERBI CASTELLÀ! Mesetes àrides, però el futbol és molt calent.",
+        "Derbi castellà! Mesetes àrides, però el futbol és molt calent.",
     ],
     "Comunitat Valenciana": [
-        "⚠️ DERBI VALENCIANISTA! La paella es cuina amb tres punts.",
-        "🍊 Taronges i rivalitat: la combinació perfecta del Llevant.",
+        "Derbi valencianista! La paella es cuina amb tres punts. 🍊",
+        "Taronges i rivalitat: la combinació perfecta del Llevant.",
     ],
 }
 
-# Frases de troleo per a duels directes entre companys (placeholders {a} i {b})
-DIRECT_DUEL_TAUNTS: list[str] = [
-    "⚔️ {a} vs {b}! El partit de la lligueta dins el partit de la jornada. Qui dorm avui tranquil?",
-    "🎯 {a}, el teu equip juga contra el de {b}. I tots dos ho sabeu. Pressió màxima! 😅",
-    "💥 PICA! {a} i {b} s'enfronten. Qui guanya avui convida a les birres? 🍺",
-    "🔥 {a} contra {b}: el que perd haurà de suportar les burles fins a la propera jornada.",
-    "🤜🤛 {a} i {b} cara a cara. El futbol és cruel, però la lligueta encara més.",
+# Frases de context per a duels directes (prèvia) – placeholders {a}, {b}, {pts_a}, {pts_b}
+DUEL_CONTEXT_TAUNTS: list[str] = [
+    "Partit de 6 punts clau! {a} ({pos_a}è, {pts_a} pts) i {b} ({pos_b}è, {pts_b} pts) s'hi juguen molt.",
+    "{a} defensa la seva posició a casa i {b} busca assaltar-la. Qui parpelleja primer?",
+    "Diferència de {diff} pt(s) a la taula. El que guanya s'endú el duel directe de la lligueta.",
+    "Directe entre els dos! {a} ({pts_a} pts) i {b} ({pts_b} pts). La tensió és màxima.",
 ]
 
-# Frases per a partits del líder
-LEADER_TAUNTS: list[str] = [
-    "👑 El líder {leader} ({pts} pts) entra en escena. El seu equip no pot fallar.",
-    "🏆 {leader} manda a la taula amb {pts} pts. Avui vol ampliar diferències.",
+# Emojis de resultat per a post-jornada
+RESULT_EXACT = "🎯"
+RESULT_SIGN  = "🟡"
+RESULT_WRONG = "❌"
+
+# Comentaris post-duel (placeholders {winner}, {loser})
+POST_DUEL_COMMENTS: list[str] = [
+    "Victòria i ple de {winner} que s'endú el duel directe!",
+    "{winner} guanya el mà a mà de la lligueta. {loser} haurà d'esperar revanxa.",
+    "Gran nit per a {winner}. {loser} se'n va de buit del derby particular.",
+    "{loser} cau en el duel directe. {winner} amplia distàncies a la taula.",
 ]
 
-# Frases per a partits del cuer
-BOTTOM_TAUNTS: list[str] = [
-    "😬 {bottom} porta la lanterna vermella ({pts} pts). Una altra derrota i serà molt fosc.",
-    "⚠️ {bottom} és el darrer de la taula amb {pts} pts. Avui és clau per sobreviure.",
+POST_DUEL_DRAW_COMMENTS: list[str] = [
+    "Empat en el duel directe. Cap dels dos avança a la taula, segueixen els dos igual.",
+    "Repartiment de punts en el mà a mà. La lligueta segueix ben oberta.",
 ]
 
-# Frases per a rivals directes separats per pocs punts
-CLOSE_RIVAL_TAUNTS: list[str] = [
-    "📊 {a} ({pts_a} pts) i {b} ({pts_b} pts) estan separats per {diff} punt(s). Directe vital!",
-    "🔍 {a} i {b} separats per tan sols {diff} punt(s). Qui guanya avança a la taula!",
-]
 
-import random
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
+def _esc(text: str) -> str:
+    """Escapa caràcters especials d'HTML per a noms dinàmics."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _handle(participant: dict) -> str:
+    """Retorna el @handle de Telegram o el display_name si no n'hi ha."""
+    h = (participant.get("telegram_handle") or "").strip()
+    if h:
+        return h if h.startswith("@") else f"@{h}"
+    return _esc(participant.get("display_name") or participant.get("username", "?"))
+
+
+def _build_team_to_player(participants: list[dict]) -> dict[str, dict]:
+    m: dict[str, dict] = {}
+    for p in participants:
+        team = (p.get("hyper_team_id") or "").strip()
+        if team:
+            m[team] = p
+    return m
+
+
+def _score_prediction(
+    pred_home: int, pred_away: int, real_home: int, real_away: int
+) -> tuple[int, str]:
+    """Retorna (punts, emoji)."""
+    if pred_home == real_home and pred_away == real_away:
+        return 3, RESULT_EXACT
+    pred_sign = (pred_home > pred_away) - (pred_home < pred_away)
+    real_sign = (real_home > real_away) - (real_home < real_away)
+    if pred_sign == real_sign:
+        return 1, RESULT_SIGN
+    return 0, RESULT_WRONG
+
+
+# ---------------------------------------------------------------------------
+# Detecció de duels i derbis
+# ---------------------------------------------------------------------------
 
 def detect_direct_duels(
     matches: list[dict],
@@ -106,158 +167,74 @@ def detect_direct_duels(
     """
     Detecta duels directes entre companys de la lligueta.
 
-    Paràmetres
-    ----------
-    matches : llista de dicts amb claus ``home_team`` i ``away_team``
-              (noms interns, ex: 'Granada', 'Oviedo').
-    participants : llista de dicts amb claus ``display_name`` (o ``username``)
-                   i ``hyper_team_id`` (nom intern de l'equip).
-
-    Retorna
-    -------
-    Llista de dicts:
-        {
-            "match": <match dict>,
-            "player_home": <participant dict>,
-            "player_away": <participant dict>,
-            "taunt": <str>,
-        }
+    Retorna llista de dicts:
+        match, player_home, player_away
     """
-    team_to_player: dict[str, dict] = {}
-    for p in participants:
-        team = (p.get("hyper_team_id") or "").strip()
-        if team:
-            team_to_player[team] = p
-
+    t2p = _build_team_to_player(participants)
     duels = []
     for match in matches:
         home = (match.get("home_team") or "").strip()
         away = (match.get("away_team") or "").strip()
-        ph = team_to_player.get(home)
-        pa = team_to_player.get(away)
+        ph = t2p.get(home)
+        pa = t2p.get(away)
         if ph and pa:
-            name_a = ph.get("display_name") or ph.get("username", "?")
-            name_b = pa.get("display_name") or pa.get("username", "?")
-            taunt = random.choice(DIRECT_DUEL_TAUNTS).format(a=name_a, b=name_b)
-            duels.append({
-                "match": match,
-                "player_home": ph,
-                "player_away": pa,
-                "taunt": taunt,
-            })
+            duels.append({"match": match, "player_home": ph, "player_away": pa})
     return duels
 
 
 def detect_derbies(matches: list[dict]) -> list[dict]:
     """
-    Detecta derbis geogràfics entre equips de la mateixa comunitat autònoma.
+    Detecta derbis geogràfics entre equips de la mateixa comunitat.
 
-    Retorna
-    -------
-    Llista de dicts:
-        {
-            "match": <match dict>,
-            "region": <str>,
-            "taunt": <str>,
-        }
+    Retorna llista de dicts:
+        match, region, taunt
     """
     derbies = []
     for match in matches:
         home = (match.get("home_team") or "").strip()
         away = (match.get("away_team") or "").strip()
-        region_h = TEAM_REGION.get(home)
-        region_a = TEAM_REGION.get(away)
-        if region_h and region_h == region_a:
-            taunts = DERBY_TAUNTS.get(region_h, [f"⚠️ DERBI de {region_h}!"])
-            derbies.append({
-                "match": match,
-                "region": region_h,
-                "taunt": random.choice(taunts),
-            })
+        rh = TEAM_REGION.get(home)
+        ra = TEAM_REGION.get(away)
+        if rh and rh == ra:
+            taunts = DERBY_TAUNTS.get(rh, [f"Derbi de {rh}!"])
+            derbies.append({"match": match, "region": rh, "taunt": random.choice(taunts)})
     return derbies
 
 
-def classify_context(
-    match: dict,
+# ---------------------------------------------------------------------------
+# Context de classificació per a un duel directe (prèvia)
+# ---------------------------------------------------------------------------
+
+def _duel_context(
+    player_home: dict,
+    player_away: dict,
     rankings: list[dict],
-) -> str | None:
-    """
-    Genera un missatge de context de classificació per a un partit concret.
+) -> str:
+    """Genera el text de context per a un duel directe a la prèvia."""
+    rank_map = {
+        (r.get("username") or ""): (idx + 1, r.get("puntos", 0))
+        for idx, r in enumerate(rankings)
+    }
+    u_h = player_home.get("username", "")
+    u_a = player_away.get("username", "")
+    pos_h, pts_h = rank_map.get(u_h, (0, 0))
+    pos_a, pts_a = rank_map.get(u_a, (0, 0))
+    diff = abs(pts_h - pts_a)
 
-    Paràmetres
-    ----------
-    match : dict amb ``home_team`` i ``away_team``.
-    rankings : llista de dicts ordenada per punts (descendent) amb claus
-               ``display_name`` / ``username``, ``hyper_team_id``, ``puntos``.
+    handle_h = _handle(player_home)
+    handle_a = _handle(player_away)
 
-    Retorna
-    -------
-    String amb el missatge o None si no hi ha context rellevant.
-    """
-    if not rankings:
-        return None
-
-    # Indexem per equip
-    team_rank: dict[str, dict] = {}
-    for idx, r in enumerate(rankings):
-        team = (r.get("hyper_team_id") or "").strip()
-        if team:
-            team_rank[team] = {**r, "_pos": idx + 1}
-
-    home = (match.get("home_team") or "").strip()
-    away = (match.get("away_team") or "").strip()
-
-    rh = team_rank.get(home)
-    ra = team_rank.get(away)
-    if not rh or not ra:
-        return None
-
-    leader = rankings[0]
-    bottom = rankings[-1]
-    leader_team = (leader.get("hyper_team_id") or "").strip()
-    bottom_team = (bottom.get("hyper_team_id") or "").strip()
-
-    msgs = []
-
-    # Líder involucrat
-    if home == leader_team or away == leader_team:
-        name = leader.get("display_name") or leader.get("username", "?")
-        pts = leader.get("puntos", 0)
-        msgs.append(random.choice(LEADER_TAUNTS).format(leader=name, pts=pts))
-
-    # Cuer involucrat
-    if home == bottom_team or away == bottom_team:
-        name = bottom.get("display_name") or bottom.get("username", "?")
-        pts = bottom.get("puntos", 0)
-        msgs.append(random.choice(BOTTOM_TAUNTS).format(bottom=name, pts=pts))
-
-    # Rivals directes (≤3 punts de diferència, exclou líder i cuer)
-    diff = abs((rh.get("puntos") or 0) - (ra.get("puntos") or 0))
-    if diff <= 3 and home != leader_team and away != leader_team \
-            and home != bottom_team and away != bottom_team:
-        name_h = rh.get("display_name") or rh.get("username", "?")
-        name_a = ra.get("display_name") or ra.get("username", "?")
-        msgs.append(
-            random.choice(CLOSE_RIVAL_TAUNTS).format(
-                a=name_h,
-                pts_a=rh.get("puntos", 0),
-                b=name_a,
-                pts_b=ra.get("puntos", 0),
-                diff=diff,
-            )
-        )
-
-    return "\n".join(msgs) if msgs else None
-
-
-def _esc(text: str) -> str:
-    """Escapa caràcters especials d'HTML per a noms dinàmics."""
-    return (
-        text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
+    return random.choice(DUEL_CONTEXT_TAUNTS).format(
+        a=handle_h, b=handle_a,
+        pos_a=pos_h, pts_a=pts_h,
+        pos_b=pos_a, pts_b=pts_a,
+        diff=diff,
     )
 
+
+# ---------------------------------------------------------------------------
+# Missatge de PRÈVIA
+# ---------------------------------------------------------------------------
 
 def format_prejornada_message(
     round_number: int,
@@ -266,70 +243,323 @@ def format_prejornada_message(
     rankings: list[dict],
 ) -> str:
     """
-    Genera el missatge complet de pre-jornada per a Telegram (HTML).
+    Genera el missatge de prèvia de jornada per a Telegram (HTML).
+
+    Format:
+      🚨 PRÈVIA JORNADA N 🚨
+      🔥 <Equip local> ({handle_local}) 🆚 <Equip visitant> ({handle_visitant})
+        > Context del duel (punts, posició…)
+      ⚽ LA RESTA DE LA TROPA:
+        * Equip A vs Equip B ({handle})
+      📊 Recordeu que teniu fins a 1 hora abans…
+    """
+    t2p = _build_team_to_player(participants)
+    derby_set = {id(m["match"]) for m in detect_derbies(matches)}
+
+    featured: list[dict] = []   # partits destacats (duel directe o derbi)
+    rest: list[dict] = []       # resta de partits
+
+    for match in matches:
+        home = (match.get("home_team") or "").strip()
+        away = (match.get("away_team") or "").strip()
+        ph = t2p.get(home)
+        pa = t2p.get(away)
+        is_duel = bool(ph and pa)
+        is_derby = id(match) in derby_set
+
+        if is_duel or is_derby:
+            featured.append({"match": match, "player_home": ph, "player_away": pa,
+                              "is_duel": is_duel, "is_derby": is_derby})
+        else:
+            rest.append({"match": match, "player_home": ph, "player_away": pa})
+
+    lines: list[str] = []
+    lines.append(f"🚨 <b>PRÈVIA JORNADA {round_number}</b> 🚨")
+    lines.append("")
+
+    # --- Partits destacats ---
+    for item in featured:
+        m = item["match"]
+        home_name = _esc(m.get("home_team", "?"))
+        away_name = _esc(m.get("away_team", "?"))
+        ph = item["player_home"]
+        pa = item["player_away"]
+
+        home_label = f"{home_name} ({_handle(ph)})" if ph else home_name
+        away_label = f"{away_name} ({_handle(pa)})" if pa else away_name
+
+        lines.append(f"🔥 <b>{home_label} 🆚 {away_label}</b>")
+
+        # Context del duel directe
+        if item["is_duel"] and ph and pa:
+            ctx = _duel_context(ph, pa, rankings)
+            lines.append(f"  {ctx}")
+
+        # Afegim nota de derbi si escau
+        if item["is_derby"]:
+            derby_info = next(
+                (d for d in detect_derbies([m]) if d["match"] is m), None
+            )
+            if derby_info:
+                lines.append(f"  🏟️ {_esc(derby_info['taunt'])}")
+
+        lines.append("")
+
+    # --- La resta de la tropa ---
+    if rest:
+        lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
+        for item in rest:
+            m = item["match"]
+            home_name = _esc(m.get("home_team", "?"))
+            away_name = _esc(m.get("away_team", "?"))
+            ph = item["player_home"]
+            pa = item["player_away"]
+
+            parts_str = ""
+            if ph and not pa:
+                parts_str = f" ({_handle(ph)})"
+            elif pa and not ph:
+                parts_str = f" ({_handle(pa)})"
+
+            lines.append(f"  • {home_name} vs {away_name}{parts_str}")
+        lines.append("")
+
+    lines.append(
+        "📊 <i>Recordeu que teniu fins a 1 hora abans del vostre partit respectiu "
+        "per revisar i guardar les prediccions a la web!</i>"
+    )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Missatge de POST-JORNADA
+# ---------------------------------------------------------------------------
+
+def format_postjornada_message(
+    round_number: int,
+    matches: list[dict],
+    participants: list[dict],
+    rankings_before: list[dict],
+    rankings_after: list[dict],
+    predictions: list[dict],
+) -> str:
+    """
+    Genera el missatge de resultats post-jornada per a Telegram (HTML).
+
+    Format:
+      🏁 RESULTATS JORNADA N 🏁
+      🔥 <home> ({handle_h}) 🆚 <away> ({handle_a})
+        > Resultat real: G-G | @handle: G-G (+X pts emoji) | @handle: G-G (+X pts emoji)
+        > Comentari del duel
+      ⚽ LA RESTA DE LA TROPA:
+        * home vs away ({handle}): Real G-G | Pronòstic: G-G (+X pts emoji)
+      📊 ESTAT DE LA LLIGUETA:
+        * Top 3: …
+        * Cua: …
 
     Paràmetres
     ----------
-    round_number : número de jornada.
-    matches      : partits de la jornada (dicts amb home_team, away_team, match_date, match_time).
-    participants : jugadors de la lligueta (dicts amb display_name, hyper_team_id).
-    rankings     : classificació actual (ordenada per puntos desc).
-
-    Retorna
-    -------
-    Missatge formatat en HTML (compatible amb Telegram parse_mode=HTML).
+    matches         : partits amb home_goals i away_goals (None = no jugat, s'omet).
+    participants    : jugadors.
+    rankings_before : classificació ABANS de la jornada (per calcular moviments).
+    rankings_after  : classificació DESPRÉS de la jornada.
+    predictions     : llista de dicts {username, match_key, pred_home, pred_away}.
     """
+    t2p = _build_team_to_player(participants)
+
+    # Mapa de prediccions: (username, match_key) → pred
+    pred_map: dict[tuple[str, str], dict] = {}
+    for pred in predictions:
+        key = (pred.get("username", ""), pred.get("match_key", ""))
+        pred_map[key] = pred
+
+    # Partits amb resultat
+    played = [
+        m for m in matches
+        if m.get("home_goals") is not None and m.get("away_goals") is not None
+    ]
+
+    if not played:
+        return (
+            f"🏁 <b>RESULTATS JORNADA {round_number}</b> 🏁\n\n"
+            "<i>Encara no hi ha resultats disponibles.</i>"
+        )
+
+    # Classifiquem partits en destacats i resta (igual que a la prèvia)
+    derby_matches = {id(m["match"]) for m in detect_derbies(played)}
+    featured: list[dict] = []
+    rest: list[dict] = []
+
+    for match in played:
+        home = (match.get("home_team") or "").strip()
+        away = (match.get("away_team") or "").strip()
+        ph = t2p.get(home)
+        pa = t2p.get(away)
+        is_duel = bool(ph and pa)
+        is_derby = id(match) in derby_matches
+        entry = {
+            "match": match, "player_home": ph, "player_away": pa,
+            "is_duel": is_duel, "is_derby": is_derby,
+        }
+        if is_duel or is_derby:
+            featured.append(entry)
+        else:
+            rest.append(entry)
+
     lines: list[str] = []
-    lines.append(f"⚽ <b>JORNADA {round_number} – PRÈVIA</b> ⚽")
+    lines.append(f"🏁 <b>RESULTATS JORNADA {round_number}</b> 🏁")
     lines.append("")
 
-    # --- Partits de la jornada ---
-    lines.append("📅 <b>Partits de la jornada:</b>")
-    for m in matches:
-        home = _esc(m.get("home_team", "?"))
-        away = _esc(m.get("away_team", "?"))
-        date = _esc(m.get("match_date", ""))
-        time_ = _esc(m.get("match_time", ""))
-        when = f"{date} {time_}".strip()
-        lines.append(f"  • {home} vs {away}" + (f"  <i>{when}</i>" if when else ""))
-    lines.append("")
+    def _match_result_line(match: dict, ph: dict | None, pa: dict | None) -> list[str]:
+        """Genera les línies de resultat per a un partit."""
+        mk = match.get("match_key", "")
+        rh = match.get("home_goals", 0)
+        ra = match.get("away_goals", 0)
+        result_str = f"{rh}-{ra}"
+        result_lines = [f"  Resultat real: <b>{result_str}</b>"]
 
-    # --- Piques directes ---
-    duels = detect_direct_duels(matches, participants)
-    if duels:
-        lines.append("🔥 <b>PIQUES DIRECTES:</b>")
-        for d in duels:
-            lines.append(_esc(d["taunt"]))
+        for player in [ph, pa]:
+            if not player:
+                continue
+            un = player.get("username", "")
+            pred = pred_map.get((un, mk))
+            if pred is None:
+                continue
+            ph_pred = pred.get("pred_home")
+            pa_pred = pred.get("pred_away")
+            if ph_pred is None or pa_pred is None:
+                continue
+            pts, emoji = _score_prediction(ph_pred, pa_pred, rh, ra)
+            handle = _handle(player)
+            result_lines.append(
+                f"  {handle}: {ph_pred}-{pa_pred} ({'+' if pts > 0 else ''}{pts} pts {emoji})"
+            )
+        return result_lines
+
+    # --- Partits destacats ---
+    for item in featured:
+        m = item["match"]
+        home_name = _esc(m.get("home_team", "?"))
+        away_name = _esc(m.get("away_team", "?"))
+        ph = item["player_home"]
+        pa = item["player_away"]
+
+        home_label = f"{home_name} ({_handle(ph)})" if ph else home_name
+        away_label = f"{away_name} ({_handle(pa)})" if pa else away_name
+        lines.append(f"🔥 <b>{home_label} 🆚 {away_label}</b>")
+
+        for rl in _match_result_line(m, ph, pa):
+            lines.append(rl)
+
+        # Comentari del duel directe
+        if item["is_duel"] and ph and pa:
+            rh = m.get("home_goals", 0)
+            ra = m.get("away_goals", 0)
+            mk = m.get("match_key", "")
+            pred_h = pred_map.get((ph.get("username", ""), mk))
+            pred_a = pred_map.get((pa.get("username", ""), mk))
+
+            pts_h = (
+                _score_prediction(pred_h["pred_home"], pred_h["pred_away"], rh, ra)[0]
+                if pred_h and pred_h.get("pred_home") is not None and pred_h.get("pred_away") is not None
+                else 0
+            )
+            pts_a = (
+                _score_prediction(pred_a["pred_home"], pred_a["pred_away"], rh, ra)[0]
+                if pred_a and pred_a.get("pred_home") is not None and pred_a.get("pred_away") is not None
+                else 0
+            )
+
+            handle_h = _handle(ph)
+            handle_a = _handle(pa)
+
+            if rh > ra:
+                winner_handle, loser_handle = handle_h, handle_a
+            elif ra > rh:
+                winner_handle, loser_handle = handle_a, handle_h
+            else:
+                winner_handle, loser_handle = None, None
+
+            if winner_handle:
+                comment = random.choice(POST_DUEL_COMMENTS).format(
+                    winner=winner_handle, loser=loser_handle
+                )
+                # Afegim nota sobre punts si hi ha diferència
+                if pts_h != pts_a:
+                    best_handle = handle_h if pts_h >= pts_a else handle_a
+                    worst_handle = handle_a if pts_h >= pts_a else handle_h
+                    comment += f" {best_handle} salva {pts_h if pts_h >= pts_a else pts_a} pt(s); {worst_handle} se'n va amb {min(pts_h, pts_a)}."
+                lines.append(f"  <i>{comment}</i>")
+            else:
+                lines.append(f"  <i>{random.choice(POST_DUEL_DRAW_COMMENTS)}</i>")
+
         lines.append("")
 
-    # --- Derbis geogràfics ---
-    derbies = detect_derbies(matches)
-    if derbies:
-        lines.append("🏟️ <b>DERBIS DE LA JORNADA:</b>")
-        for db in derbies:
-            lines.append(_esc(db["taunt"]))
+    # --- La resta de la tropa ---
+    if rest:
+        lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
+        for item in rest:
+            m = item["match"]
+            home_name = _esc(m.get("home_team", "?"))
+            away_name = _esc(m.get("away_team", "?"))
+            ph = item["player_home"]
+            pa = item["player_away"]
+            rh = m.get("home_goals", 0)
+            ra = m.get("away_goals", 0)
+            mk = m.get("match_key", "")
+
+            # Etiqueta del partit
+            player = ph or pa
+            if ph and pa:
+                part_label = f"{home_name} ({_handle(ph)}) vs {away_name} ({_handle(pa)})"
+            elif player:
+                handle = _handle(player)
+                part_label = f"{home_name} vs {away_name} ({handle})"
+            else:
+                part_label = f"{home_name} vs {away_name}"
+
+            result_str = f"Real <b>{rh}-{ra}</b>"
+
+            # Prediccions dels jugadors involucrats
+            pred_parts: list[str] = []
+            for p in [ph, pa]:
+                if not p:
+                    continue
+                un = p.get("username", "")
+                pred = pred_map.get((un, mk))
+                if not pred:
+                    continue
+                ph_p = pred.get("pred_home")
+                pa_p = pred.get("pred_away")
+                if ph_p is None or pa_p is None:
+                    continue
+                pts, emoji = _score_prediction(ph_p, pa_p, rh, ra)
+                pred_parts.append(f"Pronòstic: {ph_p}-{pa_p} ({'+' if pts > 0 else ''}{pts} pts {emoji})")
+
+            suffix = " | ".join([result_str] + pred_parts)
+            lines.append(f"  • {part_label}: {suffix}")
         lines.append("")
 
-    # --- Context classificació per a cada partit ---
-    ctx_lines: list[str] = []
-    for m in matches:
-        ctx = classify_context(m, rankings)
-        if ctx:
-            ctx_lines.append(_esc(ctx))
-    if ctx_lines:
-        lines.append("📊 <b>CONTEXT CLASSIFICACIÓ:</b>")
-        lines.extend(ctx_lines)
-        lines.append("")
+    # --- Estat de la lligueta ---
+    if rankings_after:
+        lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>")
 
-    # --- Classificació actual ---
-    if rankings:
-        lines.append("🏆 <b>Classificació actual de la lligueta:</b>")
-        for idx, r in enumerate(rankings, 1):
-            name = _esc(r.get("display_name") or r.get("username", "?"))
-            team = _esc(r.get("hyper_team_id", "?"))
-            pts = r.get("puntos", 0)
-            lines.append(f"  {idx}. {name} ({team}) – {pts} pts")
-        lines.append("")
+        top3 = rankings_after[:3]
+        bottom3 = rankings_after[-3:] if len(rankings_after) > 3 else []
 
-    lines.append("<i>Bona sort a tothom! 🍀</i>")
+        top3_parts = [
+            f"{idx + 1}r {_handle(r)} ({r.get('puntos', 0)} pts)"
+            for idx, r in enumerate(top3)
+        ]
+        lines.append(f"  • Top 3: {' | '.join(top3_parts)}")
+
+        if bottom3:
+            total = len(rankings_after)
+            bottom3_parts = [
+                f"{total - len(bottom3) + idx + 1}è {_handle(r)} ({r.get('puntos', 0)} pts)"
+                for idx, r in enumerate(bottom3)
+            ]
+            lines.append(f"  • Cua: {' | '.join(bottom3_parts)}")
+
     return "\n".join(lines)
+
