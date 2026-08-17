@@ -467,6 +467,38 @@ def format_prejornada_message(
 # ---------------------------------------------------------------------------
 # Missatge de POST-JORNADA
 # ---------------------------------------------------------------------------
+def _categorize_matches(matches: list[dict], t2p: dict) -> tuple[list[dict], list[dict]]:
+    """
+    Separa els partits entre destacats (on juga almenys un participant de la porra)
+    i la resta de partits de la jornada.
+    """
+    featured = []
+    rest = []
+
+    for m in matches:
+        home_team = m.get("home_team")
+        away_team = m.get("away_team")
+
+        home_id = get_espn_id(home_team) if home_team else None
+        away_id = get_espn_id(away_team) if away_team else None
+
+        ph = t2p.get(home_id) if home_id else None
+        pa = t2p.get(away_id) if away_id else None
+
+        item = {
+            "match": m,
+            "player_home": ph,
+            "player_away": pa,
+            "is_duel": ph is not None and pa is not None
+        }
+
+        if ph or pa:
+            featured.append(item)
+        else:
+            rest.append(item)
+
+    return featured, rest
+
 def format_postjornada_message(
     round_number: int,
     matches: list[dict],
