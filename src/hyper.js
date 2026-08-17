@@ -277,7 +277,6 @@ export async function syncHyperResults(dbClient) {
       // Si el partit ja porta la jornada d'origen s'usa, si no la calculem amb el literal
       const jornada = m.jornada ? Number(m.jornada) : getJornadaFromLiteral(m.strDate);
       const idx = indexMap.get(m) ?? 0;
-      const jornada = Math.floor(idx / 11) + 1;
       return {
         match_key: String(m.idEvent),
         home_team: m.strHomeTeam,
