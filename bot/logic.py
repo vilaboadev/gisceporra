@@ -464,13 +464,11 @@ def format_prejornada_message(
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Missatge de POST-JORNADA
-# ---------------------------------------------------------------------------
 def _categorize_matches(matches: list[dict], t2p: dict) -> tuple[list[dict], list[dict]]:
     """
-    Separa els partits entre destacats (on juga almenys un participant de la porra)
-    i la resta de partits de la jornada.
+    Separa els partits entre:
+      - featured: Dols directes (TOTS DOS equips tenen un participant de la lligueta)
+      - rest: Partits d'un sol participant (NOMÉS 1 dels dos equips és d'un participant)
     """
     featured = []
     rest = []
@@ -492,13 +490,18 @@ def _categorize_matches(matches: list[dict], t2p: dict) -> tuple[list[dict], lis
             "is_duel": ph is not None and pa is not None
         }
 
-        if ph or pa:
+        if ph and pa:
+            # DUEL DIRECTE (2 jugadors enfrontats)
             featured.append(item)
-        else:
+        elif ph or pa:
+            # PARTIT D'1 SOL JUGADOR
             rest.append(item)
 
     return featured, rest
 
+# ---------------------------------------------------------------------------
+# Missatge de POST-JORNADA
+# ---------------------------------------------------------------------------
 def format_postjornada_message(
     round_number: int,
     matches: list[dict],
@@ -509,17 +512,16 @@ def format_postjornada_message(
     postponed_matches: list[dict] | None = None
 ) -> str:
     """
-    Construeix el text en format HTML per al missatge de Post-Jornada.
-    Calcula punts per partit, pronòstics dels jugadors, duels directes i resum de la lligueta.
+    Construeix el text en format HTML per al missatge de Post-Jornada
+    separant clarament Dols Directes de la Resta de Participants.
     """
     if postponed_matches is None:
         postponed_matches = []
 
     t2p = _build_espn_id_to_player(participants)
     
-    # Mapeig ràpid de pronòstics: (username, match_key) -> prediction_dict
     pred_map = {
-        (p.get("username", ""), p.get("match_key", "")): p 
+        (str(p.get("username", "")), str(p.get("match_key", ""))): p 
         for p in predictions
     }
 
@@ -529,15 +531,13 @@ def format_postjornada_message(
     lines.append(f"🏆 <b>RESUM POST-JORNADA {round_number}</b> 🏆\n")
 
     # ---------------------------------------------------------------------------
-    # DETECCIONS I AVÍS DE PARTITS FALTANTS (< 11)
+    # AVÍS DE PARTITS FALTANTS (< 11)
     # ---------------------------------------------------------------------------
     if len(matches) < 11:
         equips_jugats = set()
         for m in matches:
-            if m.get("home_team"):
-                equips_jugats.add(m.get("home_team"))
-            if m.get("away_team"):
-                equips_jugats.add(m.get("away_team"))
+            if m.get("home_team"): equips_jugats.add(m.get("home_team"))
+            if m.get("away_team"): equips_jugats.add(m.get("away_team"))
 
         jugadors_pendents = []
         for p in participants:
@@ -552,18 +552,17 @@ def format_postjornada_message(
             lines.append(f"• Partits pendents de jugadors: {', '.join(jugadors_pendents)}")
         lines.append("")
 
-    # Helper intern per a generar la línia de resultat i punts
+    # Helper intern per línies de resultat i pronòstic
     def _match_result_line(match: dict, ph: dict | None, pa: dict | None) -> list[str]:
-        mk = match.get("match_key", "")
+        mk = str(match.get("match_key", ""))
         rh = match.get("home_goals", 0)
         ra = match.get("away_goals", 0)
-        result_str = f"{rh}-{ra}"
-        result_lines = [f"  Resultat real: <b>{result_str}</b>"]
+        result_lines = [f"  Resultat real: <b>{rh}-{ra}</b>"]
 
         for player in [ph, pa]:
             if not player:
                 continue
-            un = player.get("username", "")
+            un = str(player.get("username", ""))
             handle = _handle(player)
             pred = pred_map.get((un, mk))
             
@@ -580,129 +579,81 @@ def format_postjornada_message(
         return result_lines
 
     # ---------------------------------------------------------------------------
-    # PARTITS DESTACATS I DUELS
+    # 1. DOLS DIRECTES (2 PARTICIPANTS ENFRONTATS)
     # ---------------------------------------------------------------------------
-    for item in featured:
-        m = item["match"]
-        home_name = _esc(m.get("home_team", "?"))
-        away_name = _esc(m.get("away_team", "?"))
-        ph = item["player_home"]
-        pa = item["player_away"]
+    if featured:
+        lines.append("⚔️ <b>DOLS DIRECTES DE LA JORNADA:</b>")
+        for item in featured:
+            m = item["match"]
+            home_name = _esc(m.get("home_team", "?"))
+            away_name = _esc(m.get("away_team", "?"))
+            ph = item["player_home"]
+            pa = item["player_away"]
 
-        home_label = f"{home_name} ({_handle(ph)})" if ph else home_name
-        away_label = f"{away_name} ({_handle(pa)})" if pa else away_name
-        lines.append(f"🔥 <b>{home_label} 🆚 {away_label}</b>")
+            home_label = f"{home_name} ({_handle(ph)})"
+            away_label = f"{away_name} ({_handle(pa)})"
+            lines.append(f"🔥 <b>{home_label} 🆚 {away_label}</b>")
 
-        for rl in _match_result_line(m, ph, pa):
-            lines.append(rl)
+            for rl in _match_result_line(m, ph, pa):
+                lines.append(rl)
 
-        if item["is_duel"] and ph and pa:
+            # Comentari del duel directe
             rh = m.get("home_goals", 0)
             ra = m.get("away_goals", 0)
-            mk = m.get("match_key", "")
-            pred_h = pred_map.get((ph.get("username", ""), mk))
-            pred_a = pred_map.get((pa.get("username", ""), mk))
+            mk = str(m.get("match_key", ""))
+            
+            pred_h = pred_map.get((str(ph.get("username", "")), mk))
+            pred_a = pred_map.get((str(pa.get("username", "")), mk))
 
-            pts_h = (
-                _score_prediction(pred_h["pred_home"], pred_h["pred_away"], rh, ra)[0]
-                if pred_h and pred_h.get("pred_home") is not None and pred_h.get("pred_away") is not None
-                else 0
-            )
-            pts_a = (
-                _score_prediction(pred_a["pred_home"], pred_a["pred_away"], rh, ra)[0]
-                if pred_a and pred_a.get("pred_home") is not None and pred_a.get("pred_away") is not None
-                else 0
-            )
+            pts_h = _score_prediction(pred_h["pred_home"], pred_h["pred_away"], rh, ra)[0] if (pred_h and pred_h.get("pred_home") is not None) else 0
+            pts_a = _score_prediction(pred_a["pred_home"], pred_a["pred_away"], rh, ra)[0] if (pred_a and pred_a.get("pred_home") is not None) else 0
 
             handle_h = _handle(ph)
             handle_a = _handle(pa)
 
             if pts_h > pts_a:
-                winner_handle, loser_handle = handle_h, handle_a
+                lines.append(f"  <i>{random.choice(POST_DUEL_COMMENTS).format(winner=handle_h, loser=handle_a)}</i>")
             elif pts_a > pts_h:
-                winner_handle, loser_handle = handle_a, handle_h
-            else:
-                winner_handle, loser_handle = None, None
-
-            if winner_handle:
-                comment = random.choice(POST_DUEL_COMMENTS).format(
-                    winner=winner_handle, loser=loser_handle
-                )
-                lines.append(f"  <i>{comment}</i>")
+                lines.append(f"  <i>{random.choice(POST_DUEL_COMMENTS).format(winner=handle_a, loser=handle_h)}</i>")
             else:
                 lines.append(f"  <i>{random.choice(POST_DUEL_DRAW_COMMENTS)}</i>")
 
-        lines.append("")
+            lines.append("")
 
     # ---------------------------------------------------------------------------
-    # LA RESTA DE PARTITS
+    # 2. RESTA DE PARTICIPANTS (1 SOL PARTICIPANT EN EL PARTIT)
     # ---------------------------------------------------------------------------
     if rest:
-        lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
+        lines.append("⚽ <b>PARTITS DELS PARTICIPANTS:</b>")
         for item in rest:
             m = item["match"]
             home_name = _esc(m.get("home_team", "?"))
             away_name = _esc(m.get("away_team", "?"))
             ph = item["player_home"]
             pa = item["player_away"]
-            rh = m.get("home_goals", 0)
-            ra = m.get("away_goals", 0)
-            mk = m.get("match_key", "")
 
             player = ph or pa
-            if ph and pa:
-                part_label = f"{home_name} ({_handle(ph)}) vs {away_name} ({_handle(pa)})"
-            elif player:
-                handle = _handle(player)
-                part_label = f"{home_name} vs {away_name} ({handle})"
-            else:
-                part_label = f"{home_name} vs {away_name}"
-
-            result_str = f"Real <b>{rh}-{ra}</b>"
-
-            pred_parts: list[str] = []
-            for p in [ph, pa]:
-                if not p:
-                    continue
-                un = p.get("username", "")
-                pred = pred_map.get((un, mk))
-                handle = _handle(p)
-                if not pred or pred.get("pred_home") is None or pred.get("pred_away") is None:
-                    pred_parts.append(f"{handle}: Sense pronòstic (0 pts {RESULT_WRONG})")
-                    continue
-                ph_p = pred.get("pred_home")
-                pa_p = pred.get("pred_away")
-                pts, emoji = _score_prediction(ph_p, pa_p, rh, ra)
-                pred_label = f"{ph_p}-{pa_p}"
-                pred_parts.append(f"Pronòstic: {pred_label} ({'+' if pts > 0 else ''}{pts} pts {emoji})")
-
-            suffix = " | ".join([result_str] + pred_parts)
-            lines.append(f"  • {part_label}: {suffix}")
-        lines.append("")
+            handle = _handle(player)
+            part_label = f"{home_name} ({handle}) vs {away_name}" if ph else f"{home_name} vs {away_name} ({handle})"
+            
+            lines.append(f"• <b>{part_label}</b>")
+            for rl in _match_result_line(m, ph, pa):
+                lines.append(rl)
+            lines.append("")
 
     # ---------------------------------------------------------------------------
-    # PARTITS APLAÇATS
+    # 3. PARTITS APLAÇATS
     # ---------------------------------------------------------------------------
     if postponed_matches:
         lines.append("⚠️ <b>PARTITS APLAÇATS EN AQUESTA JORNADA:</b>")
         for pm in postponed_matches:
             h_name = _esc(pm.get("home_team", "?"))
             a_name = _esc(pm.get("away_team", "?"))
-            home_espn_id = get_espn_id(pm.get("home_team"))
-            away_espn_id = get_espn_id(pm.get("away_team"))
-            ph = t2p.get(home_espn_id) if home_espn_id else None
-            pa = t2p.get(away_espn_id) if away_espn_id else None
-
-            participants_affected = []
-            if ph: participants_affected.append(_handle(ph))
-            if pa: participants_affected.append(_handle(pa))
-
-            aff_str = f" (Afecta: {', '.join(participants_affected)})" if participants_affected else ""
-            lines.append(f"  • {h_name} vs {a_name}{aff_str} — <i>S'actualitzarà quan es jugui.</i>")
+            lines.append(f"  • {h_name} vs {a_name} — <i>S'actualitzarà quan es jugui.</i>")
         lines.append("")
 
     # ---------------------------------------------------------------------------
-    # ESTAT DE LA LLIGUETA (CLASSIFICACIÓ)
+    # 4. CLASSIFICACIÓ GENERAL
     # ---------------------------------------------------------------------------
     if rankings_after:
         lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>")
