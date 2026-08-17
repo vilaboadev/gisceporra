@@ -374,6 +374,9 @@ def send_telegram_message(text: str) -> None:
         log.info("Missatge enviat correctament a Telegram.")
     except requests.RequestException as exc:
         log.error("Error en enviar el missatge a Telegram: %s", exc)
+        # Mostra el detall exacte de l'error que retorna Telegram
+        if hasattr(exc, "response") and exc.response is not None:
+            log.error("Detall de la resposta de Telegram API: %s", exc.response.text)
         sys.exit(1)
 
 
