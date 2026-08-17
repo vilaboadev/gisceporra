@@ -126,20 +126,19 @@ def _parse_match_date(match: dict) -> date | None:
     except ValueError:
         return None
 
-
 def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
     """
     Mode "auto": analitza les dates dels partits i retorna la llista de
     missatges a enviar com a [(mode, round_number), ...].
 
     Lògica:
-      - PRÈVIA: la jornada amb el primer partit sense resultat comença avui o demà
-      - POST-JORNADA: la jornada amb tots els partits amb resultat ha acabat
-        i l'últim partit va ser ahir o abans
+      - PRÈVIA: jornada sense cap resultat on el primer partit comença avui o demà.
+      - POST-JORNADA: 
+          1. Tots els partits de la jornada tenen resultat (enviament immediat).
+          2. O BÉ ja és dimarts/posterior a la data de l'últim partit (fallback per partits aplaçats).
     """
     today = date.today()
     tomorrow = today + timedelta(days=1)
-    yesterday = today - timedelta(days=1)
 
     resp = (
         client.table("hyper_results")
@@ -160,14 +159,18 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
     actions: list[tuple[str, int]] = []
 
     for rn, matches in sorted(rounds.items()):
+        # Comprovar si tots els partits tenen resultat
         has_results = all(
             m.get("home_goals") is not None and m.get("away_goals") is not None
             for m in matches
         )
+        
+        # Comprovar si cap partit té resultat encara
         no_results = all(
-            m.get("home_goals") is None
+            m.get("home_goals") is None and m.get("away_goals") is None
             for m in matches
         )
+
         dates = [_parse_match_date(m) for m in matches]
         valid_dates = [d for d in dates if d is not None]
 
@@ -177,12 +180,25 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
         first_match_date = min(valid_dates)
         last_match_date = max(valid_dates)
 
-        # Prèvia: jornada pendent + primer partit avui o demà
+        # ------------------------------------------------------------------
+        # 1. PRÈVIA: jornada pendent i el primer partit és avui o demà
+        # ------------------------------------------------------------------
         if no_results and first_match_date in (today, tomorrow):
             actions.append(("previa", rn))
 
-        # Post-jornada: tots els partits resolts + l'últim va ser ahir o abans
-        if has_results and last_match_date <= yesterday:
+        # ------------------------------------------------------------------
+        # 2. POST-JORNADA:
+        #    a) Condició ideal: Tots els partits s'han jugat (envia diumenge/dilluns al moment)
+        #    b) Fallback: Ja és dimarts o posterior a la fi de la jornada (per partits aplaçats)
+        # ------------------------------------------------------------------
+        is_past_jornada = today > last_match_date
+        is_tuesday_or_later = today.weekday() >= 1  # 0=Dilluns, 1=Dimarts...
+
+        if has_results:
+            # Tots jugats -> enviar immediatament
+            actions.append(("postjornada", rn))
+        elif is_past_jornada and is_tuesday_or_later and not no_results:
+            # Fallback: Queden partits pendents/aplaçats però ja és dimarts
             actions.append(("postjornada", rn))
 
     return actions
