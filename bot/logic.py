@@ -6,19 +6,6 @@ Funcions pures (sense efectes secundaris) per detectar:
   - Derbis geogràfics
   - Context de classificació (líder vs cuer, rivals directes…)
   - Missatges de pre-jornada i post-jornada
-
-Format dels participants:
-  username, display_name, hyper_team_id, telegram_handle (ex: "@pere")
-
-Format dels partits (matches):
-  home_team, away_team, match_date, match_time,
-  home_goals (None si no jugat), away_goals (None si no jugat)
-
-Format de les prediccions (predictions):
-  username, match_key, pred_home, pred_away
-
-Format dels rankings:
-  username, display_name, hyper_team_id, puntos
 """
 
 from __future__ import annotations
@@ -53,7 +40,6 @@ HYPER_TEAMS_BY_ID: dict[str, dict] = {
     "98": {"key": "Las Palmas", "region": "Canàries", "aliases": ["las palmas", "ud las palmas"]},
 }
 
-# Índex auxiliar per traduir qualsevol nom, àlies o ID al seu ID d'ESPN únic
 NAME_OR_ID_TO_ESPN_ID: dict[str, str] = {}
 for espn_id, data in HYPER_TEAMS_BY_ID.items():
     NAME_OR_ID_TO_ESPN_ID[espn_id] = espn_id
@@ -124,14 +110,14 @@ RESULT_SIGN  = "🟡"
 RESULT_WRONG = "❌"
 
 POST_DUEL_COMMENTS: list[str] = [
-    "Victòria i ple de {winner} que s'endú el duel directe!",
+    "Victòria de {winner} que s'endú el duel directe de la lligueta!",
     "{winner} guanya el mà a mà de la lligueta. {loser} haurà d'esperar revanxa.",
-    "Gran nit per a {winner}. {loser} se'n va de buit del derby particular.",
-    "{loser} cau en el duel directe. {winner} amplia distàncies a la taula.",
+    "Gran nit per a {winner}. {loser} se'n va de buit del duel particular.",
+    "{loser} cau en el duel directe. {winner} suma punts clau a la lligueta.",
 ]
 
 POST_DUEL_DRAW_COMMENTS: list[str] = [
-    "Empat en el duel directe. Cap dels dos avança a la taula, segueixen els dos igual.",
+    "Empat en el duel directe. Cap dels dos avança a la taula, segueixen igualats.",
     "Repartiment de punts en el mà a mà. La lligueta segueix ben oberta.",
 ]
 
@@ -406,15 +392,17 @@ def format_postjornada_message(
             if not player:
                 continue
             un = player.get("username", "")
+            handle = _handle(player)
             pred = pred_map.get((un, mk))
-            if pred is None:
+            
+            # Mostra explícitament quan un jugador no té pronòstic
+            if pred is None or pred.get("pred_home") is None or pred.get("pred_away") is None:
+                result_lines.append(f"  {handle}: <i>Sense pronòstic</i> (0 pts {RESULT_WRONG})")
                 continue
+                
             ph_pred = pred.get("pred_home")
             pa_pred = pred.get("pred_away")
-            if ph_pred is None or pa_pred is None:
-                continue
             pts, emoji = _score_prediction(ph_pred, pa_pred, rh, ra)
-            handle = _handle(player)
             result_lines.append(
                 f"  {handle}: {ph_pred}-{pa_pred} ({'+' if pts > 0 else ''}{pts} pts {emoji})"
             )
@@ -456,9 +444,10 @@ def format_postjornada_message(
             handle_h = _handle(ph)
             handle_a = _handle(pa)
 
-            if rh > ra:
+            # Guanya el duel qui aconsegueix MÉS PUNTS DE PREDICCIÓ
+            if pts_h > pts_a:
                 winner_handle, loser_handle = handle_h, handle_a
-            elif ra > rh:
+            elif pts_a > pts_h:
                 winner_handle, loser_handle = handle_a, handle_h
             else:
                 winner_handle, loser_handle = None, None
@@ -467,10 +456,6 @@ def format_postjornada_message(
                 comment = random.choice(POST_DUEL_COMMENTS).format(
                     winner=winner_handle, loser=loser_handle
                 )
-                if pts_h != pts_a:
-                    best_handle = handle_h if pts_h >= pts_a else handle_a
-                    worst_handle = handle_a if pts_h >= pts_a else handle_h
-                    comment += f" {best_handle} salva {pts_h if pts_h >= pts_a else pts_a} pt(s); {worst_handle} se'n va amb {min(pts_h, pts_a)}."
                 lines.append(f"  <i>{comment}</i>")
             else:
                 lines.append(f"  <i>{random.choice(POST_DUEL_DRAW_COMMENTS)}</i>")
@@ -507,14 +492,15 @@ def format_postjornada_message(
                     continue
                 un = p.get("username", "")
                 pred = pred_map.get((un, mk))
-                if not pred:
+                handle = _handle(p)
+                if not pred or pred.get("pred_home") is None or pred.get("pred_away") is None:
+                    pred_parts.append(f"{handle}: Sense pronòstic (0 pts {RESULT_WRONG})")
                     continue
                 ph_p = pred.get("pred_home")
                 pa_p = pred.get("pred_away")
-                if ph_p is None or pa_p is None:
-                    continue
                 pts, emoji = _score_prediction(ph_p, pa_p, rh, ra)
-                pred_parts.append(f"Pronòstic: {ph_p}-{pa_p} ({'+' if pts > 0 else ''}{pts} pts {emoji})")
+                pred_label = f"{ph_p}-{pa_p}"
+                pred_parts.append(f"Pronòstic: {pred_label} ({'+' if pts > 0 else ''}{pts} pts {emoji})")
 
             suffix = " | ".join([result_str] + pred_parts)
             lines.append(f"  • {part_label}: {suffix}")
