@@ -1,16 +1,39 @@
 """
-logic.py – Intel·ligència del bot de la Lligueta de 2a Divisió.
+logic.py – Intel·ligència del bot de la Lligueta de 2a Divisió (LaLiga Hypermotion).
 
 Funcions pures (sense efectes secundaris) per detectar:
+  - Correlació de dates amb la jornada corresponent (1-42) des de schedule.json
   - Duels directes entre companys de la lligueta
   - Derbis geogràfics
   - Context de classificació (líder vs cuer, rivals directes…)
-  - Missatges de pre-jornada i post-jornada
+  - Estat de la jornada (completada, partits pendents, partits aplaçats)
+  - Generació de missatges HTML per a Telegram (Prèvia, Post-jornada i Actualització d'Aplaçats)
 """
 
 from __future__ import annotations
 
+import datetime
+import json
 import random
+import re
+from pathlib import Path
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Càrrega del calendari des de schedule.json
+# ---------------------------------------------------------------------------
+
+def load_schedule(filepath: str | Path = "schedule.json") -> list[dict[str, Any]]:
+    """Carrega el calendari oficial de la temporada des del fitxer schedule.json."""
+    path = Path(filepath)
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
 
 # ---------------------------------------------------------------------------
 # Mapeig d'equips Hypermotion (ID ESPN -> Dades i Àlies)
@@ -62,6 +85,79 @@ def get_team_region(team_identifier: str | None) -> str | None:
     if espn_id and espn_id in HYPER_TEAMS_BY_ID:
         return HYPER_TEAMS_BY_ID[espn_id]["region"]
     return None
+
+
+# ---------------------------------------------------------------------------
+# Gestió de dates i jornada segons calendari JSON
+# ---------------------------------------------------------------------------
+
+def get_jornada_from_date(
+    date_input: str | datetime.date | None = None,
+    schedule: list[dict] | None = None,
+) -> dict:
+    """
+    Calcula la jornada associada a una data basant-se en el diumenge de referència més proper.
+    Retorna un diccionari amb el número de jornada, data de referència i finestra de dates per a ESPN.
+    """
+    if schedule is None:
+        schedule = load_schedule()
+
+    if not schedule:
+        raise ValueError("El calendari de la lligueta està buit o no s'ha trobat schedule.json.")
+
+    if isinstance(date_input, str):
+        target_date = datetime.datetime.strptime(date_input[:10], "%Y-%m-%d").date()
+    elif isinstance(date_input, datetime.date):
+        target_date = date_input
+    else:
+        target_date = datetime.date.today()
+
+    min_diff = float("inf")
+    best_item = schedule[0]
+
+    for item in schedule:
+        ref_date = datetime.datetime.strptime(item["dateRef"], "%Y-%m-%d").date()
+        diff = abs((target_date - ref_date).days)
+        if diff < min_diff:
+            min_diff = diff
+            best_item = item
+
+    ref_date = datetime.datetime.strptime(best_item["dateRef"], "%Y-%m-%d").date()
+    # Finestra de cerca per a la jornada: Dijous (-3 dies) a Dimarts (+2 dies)
+    start_date = ref_date - datetime.timedelta(days=3)
+    end_date = ref_date + datetime.timedelta(days=2)
+
+    return {
+        "jornada": int(best_item["jornada"]),
+        "dateRef": best_item["dateRef"],
+        "ref_date": ref_date,
+        "start_str": start_date.strftime("%Y%m%d"),
+        "end_str": end_date.strftime("%Y%m%d"),
+    }
+
+
+def get_jornada_date_window(
+    jornada_num: int,
+    schedule: list[dict] | None = None,
+) -> dict | None:
+    """Obté la finestra de cerca de dates YYYYMMDD per a una jornada en concret."""
+    if schedule is None:
+        schedule = load_schedule()
+
+    item = next((s for s in schedule if s["jornada"] == jornada_num), None)
+    if not item:
+        return None
+
+    ref_date = datetime.datetime.strptime(item["dateRef"], "%Y-%m-%d").date()
+    start_date = ref_date - datetime.timedelta(days=3)
+    end_date = ref_date + datetime.timedelta(days=2)
+
+    return {
+        "jornada": jornada_num,
+        "dateRef": item["dateRef"],
+        "start_str": start_date.strftime("%Y%m%d"),
+        "end_str": end_date.strftime("%Y%m%d"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +264,7 @@ def _score_prediction(
 
 
 # ---------------------------------------------------------------------------
-# Detecció de duels i derbis
+# Detecció de duels, derbis i estat de partits
 # ---------------------------------------------------------------------------
 
 def detect_direct_duels(
@@ -200,6 +296,52 @@ def detect_derbies(matches: list[dict]) -> list[dict]:
             taunts = DERBY_TAUNTS.get(rh, [f"Derbi de {rh}!"])
             derbies.append({"match": match, "region": rh, "taunt": random.choice(taunts)})
     return derbies
+
+
+def evaluate_jornada_matches_status(
+    matches: list[dict],
+    participants: list[dict],
+) -> dict:
+    """
+    Avalua l'estat dels partits de la jornada.
+    Separar partits finalitzats, pendents i aplaçats (i si afecten participants).
+    """
+    t2p = _build_espn_id_to_player(participants)
+
+    played = []
+    pending = []
+    postponed_all = []
+    postponed_relevant = []
+
+    for m in matches:
+        detail = (m.get("detail") or m.get("status_detail") or "").upper()
+        state = (m.get("state") or m.get("status_state") or "").lower()
+        is_postponed = "POSTPONED" in detail or m.get("is_postponed", False)
+
+        home_espn_id = get_espn_id(m.get("home_team"))
+        away_espn_id = get_espn_id(m.get("away_team"))
+        ph = t2p.get(home_espn_id) if home_espn_id else None
+        pa = t2p.get(away_espn_id) if away_espn_id else None
+        is_relevant = bool(ph or pa)
+
+        if is_postponed:
+            postponed_all.append(m)
+            if is_relevant:
+                postponed_relevant.append({"match": m, "player_home": ph, "player_away": pa})
+        elif state == "post" or (m.get("home_goals") is not None and m.get("away_goals") is not None):
+            played.append(m)
+        else:
+            pending.append(m)
+
+    all_completed = len(pending) == 0 and (len(played) + len(postponed_all)) == len(matches)
+
+    return {
+        "all_completed": all_completed,
+        "played": played,
+        "pending": pending,
+        "postponed_all": postponed_all,
+        "postponed_relevant": postponed_relevant,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +414,6 @@ def format_prejornada_message(
     lines.append(f"🚨 <b>PRÈVIA JORNADA {round_number}</b> 🚨")
     lines.append("")
 
-    # --- Partits destacats ---
     for item in featured:
         m = item["match"]
         home_name = _esc(m.get("home_team", "?"))
@@ -298,7 +439,6 @@ def format_prejornada_message(
 
         lines.append("")
 
-    # --- La resta de la tropa ---
     if rest:
         lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
         for item in rest:
@@ -335,6 +475,7 @@ def format_postjornada_message(
     rankings_before: list[dict],
     rankings_after: list[dict],
     predictions: list[dict],
+    postponed_matches: list[dict] | None = None,
 ) -> str:
     """Genera el missatge de resultats post-jornada per a Telegram (HTML)."""
     t2p = _build_espn_id_to_player(participants)
@@ -349,7 +490,7 @@ def format_postjornada_message(
         if m.get("home_goals") is not None and m.get("away_goals") is not None
     ]
 
-    if not played:
+    if not played and not postponed_matches:
         return (
             f"🏁 <b>RESULTATS JORNADA {round_number}</b> 🏁\n\n"
             "<i>Encara no hi ha resultats disponibles.</i>"
@@ -395,7 +536,6 @@ def format_postjornada_message(
             handle = _handle(player)
             pred = pred_map.get((un, mk))
             
-            # Mostra explícitament quan un jugador no té pronòstic
             if pred is None or pred.get("pred_home") is None or pred.get("pred_away") is None:
                 result_lines.append(f"  {handle}: <i>Sense pronòstic</i> (0 pts {RESULT_WRONG})")
                 continue
@@ -408,7 +548,6 @@ def format_postjornada_message(
             )
         return result_lines
 
-    # --- Partits destacats ---
     for item in featured:
         m = item["match"]
         home_name = _esc(m.get("home_team", "?"))
@@ -444,7 +583,6 @@ def format_postjornada_message(
             handle_h = _handle(ph)
             handle_a = _handle(pa)
 
-            # Guanya el duel qui aconsegueix MÉS PUNTS DE PREDICCIÓ
             if pts_h > pts_a:
                 winner_handle, loser_handle = handle_h, handle_a
             elif pts_a > pts_h:
@@ -462,7 +600,6 @@ def format_postjornada_message(
 
         lines.append("")
 
-    # --- La resta de la tropa ---
     if rest:
         lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
         for item in rest:
@@ -506,7 +643,24 @@ def format_postjornada_message(
             lines.append(f"  • {part_label}: {suffix}")
         lines.append("")
 
-    # --- Estat de la lligueta ---
+    if postponed_matches:
+        lines.append("⚠️ <b>PARTITS APLAÇATS EN AQUESTA JORNADA:</b>")
+        for pm in postponed_matches:
+            h_name = _esc(pm.get("home_team", "?"))
+            a_name = _esc(pm.get("away_team", "?"))
+            home_espn_id = get_espn_id(pm.get("home_team"))
+            away_espn_id = get_espn_id(pm.get("away_team"))
+            ph = t2p.get(home_espn_id) if home_espn_id else None
+            pa = t2p.get(away_espn_id) if away_espn_id else None
+
+            participants_affected = []
+            if ph: participants_affected.append(_handle(ph))
+            if pa: participants_affected.append(_handle(pa))
+
+            aff_str = f" (Afecta: {', '.join(participants_affected)})" if participants_affected else ""
+            lines.append(f"  • {h_name} vs {a_name}{aff_str} — <i>S'actualitzarà quan es jugui.</i>")
+        lines.append("")
+
     if rankings_after:
         lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>")
 
@@ -526,5 +680,60 @@ def format_postjornada_message(
                 for idx, r in enumerate(bottom3)
             ]
             lines.append(f"  • Cua: {' | '.join(bottom3_parts)}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Missatge especial per a la recuperació d'un PARTIT APLAÇAT
+# ---------------------------------------------------------------------------
+
+def format_postponed_match_update_message(
+    round_number: int,
+    match: dict,
+    participants: list[dict],
+    predictions: list[dict],
+) -> str:
+    """Genera un missatge de notificació quan es juga finalment un partit que havia estat aplaçat."""
+    t2p = _build_espn_id_to_player(participants)
+
+    home_name = _esc(match.get("home_team", "?"))
+    away_name = _esc(match.get("away_team", "?"))
+    rh = match.get("home_goals", 0)
+    ra = match.get("away_goals", 0)
+    mk = match.get("match_key", "")
+
+    home_espn_id = get_espn_id(match.get("home_team"))
+    away_espn_id = get_espn_id(match.get("away_team"))
+    ph = t2p.get(home_espn_id) if home_espn_id else None
+    pa = t2p.get(away_espn_id) if away_espn_id else None
+
+    pred_map = {p.get("username", ""): p for p in predictions if p.get("match_key") == mk}
+
+    lines = [
+        f"⏳ <b>RECUPERACIÓ PARTIT APLAÇAT (JORNADA {round_number})</b> ⏳",
+        "",
+        f"⚽ <b>{home_name} {rh} - {ra} {away_name}</b>",
+        ""
+    ]
+
+    for player in [ph, pa]:
+        if not player:
+            continue
+        handle = _handle(player)
+        pred = pred_map.get(player.get("username", ""))
+        if not pred or pred.get("pred_home") is None or pred.get("pred_away") is None:
+            lines.append(f"  • {handle}: <i>Sense pronòstic</i> (0 pts {RESULT_WRONG})")
+            continue
+
+        ph_p = pred.get("pred_home")
+        pa_p = pred.get("pred_away")
+        pts, emoji = _score_prediction(ph_p, pa_p, rh, ra)
+        lines.append(
+            f"  • {handle}: Pronòstic {ph_p}-{pa_p} ➡️ <b>+{pts} pts</b> {emoji}"
+        )
+
+    lines.append("")
+    lines.append("🔄 <i>Els punts s'han sumat a la classificació general de la lligueta!</i>")
 
     return "\n".join(lines)
