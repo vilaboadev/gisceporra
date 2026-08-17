@@ -26,35 +26,62 @@ from __future__ import annotations
 import random
 
 # ---------------------------------------------------------------------------
-# Mapa de comunitats autònomes per a cada equip de la 2a Divisió
-# (nom intern tal com apareix a Supabase / HYPER_TEAMS)
+# Mapeig d'equips Hypermotion (ID ESPN -> Dades i Àlies)
 # ---------------------------------------------------------------------------
-TEAM_REGION: dict[str, str] = {
-    "Almeria":         "Andalusia",
-    "Cadiz":           "Andalusia",
-    "Cordoba":         "Andalusia",
-    "Granada":         "Andalusia",
-    "Eibar":           "País Basc",
-    "Real Sociedad B": "País Basc",
-    "Sporting":        "Astúries",
-    "Oviedo":          "Astúries",
-    "Girona":          "Catalunya",
-    "Sabadell":        "Catalunya",
-    "Andorra":         "Catalunya",  # club domiciliat fora però vinculat a la zona
-    "Tenerife":        "Canàries",
-    "Las Palmas":      "Canàries",
-    "Mallorca":        "Illes Balears",
-    "Ceuta":           "Ceuta",
-    "Valladolid":      "Castella i Lleó",
-    "Burgos":          "Castella i Lleó",
-    "Albacete":        "Castella-la Manxa",
-    "Castellon":       "Comunitat Valenciana",
-    "Eldense":         "Comunitat Valenciana",
-    "Leganes":         "Madrid",
-    "Celta Fortuna":   "Galícia",
+HYPER_TEAMS_BY_ID: dict[str, dict] = {
+    "5404": {"key": "Ceuta", "region": "Ceuta", "aliases": ["ceuta", "ad ceuta fc"]},
+    "2737": {"key": "Albacete", "region": "Castella-la Manxa", "aliases": ["albacete", "albacete bp"]},
+    "12597": {"key": "Burgos", "region": "Castella i Lleó", "aliases": ["burgos", "burgos cf"]},
+    "3842": {"key": "Cadiz", "region": "Andalusia", "aliases": ["cadiz", "cádiz", "cádiz cf", "cadiz cf"]},
+    "4438": {"key": "Castellon", "region": "Comunitat Valenciana", "aliases": ["castellon", "castellón", "cd castellón", "cd castellon"]},
+    "7320": {"key": "Eldense", "region": "Comunitat Valenciana", "aliases": ["eldense", "cd eldense"]},
+    "17534": {"key": "Leganes", "region": "Madrid", "aliases": ["leganes", "leganés", "cd leganés", "cd leganes"]},
+    "245": {"key": "Tenerife", "region": "Canàries", "aliases": ["tenerife", "cd tenerife"]},
+    "11487": {"key": "Sabadell", "region": "Catalunya", "aliases": ["sabadell", "ce sabadell"]},
+    "131858": {"key": "Celta Fortuna", "region": "Galícia", "aliases": ["celta fortuna", "rc celta fortuna"]},
+    "8447": {"key": "Cordoba", "region": "Andalusia", "aliases": ["cordoba", "còrdova", "córdoba cf", "cordoba cf"]},
+    "20179": {"key": "Andorra", "region": "Catalunya", "aliases": ["andorra", "fc andorra"]},
+    "9812": {"key": "Girona", "region": "Catalunya", "aliases": ["girona", "girona fc"]},
+    "3747": {"key": "Granada", "region": "Andalusia", "aliases": ["granada", "granada cf"]},
+    "20983": {"key": "Real Sociedad B", "region": "País Basc", "aliases": ["real sociedad b", "real sociedad ii", "real sociedad 2"]},
+    "84": {"key": "Mallorca", "region": "Illes Balears", "aliases": ["mallorca", "rcd mallorca"]},
+    "92": {"key": "Oviedo", "region": "Astúries", "aliases": ["oviedo", "real oviedo"]},
+    "3788": {"key": "Sporting", "region": "Astúries", "aliases": ["sporting", "real sporting", "sporting de gijón"]},
+    "95": {"key": "Valladolid", "region": "Castella i Lleó", "aliases": ["valladolid", "real valladolid", "real valladolid cf"]},
+    "3752": {"key": "Eibar", "region": "País Basc", "aliases": ["eibar", "sd eibar"]},
+    "6832": {"key": "Almeria", "region": "Andalusia", "aliases": ["almeria", "almería", "ud almería", "ud almeria"]},
+    "98": {"key": "Las Palmas", "region": "Canàries", "aliases": ["las palmas", "ud las palmas"]},
 }
 
-# Missatges de troleo per a derbis regionals, indexats per comunitat
+# Índex auxiliar per traduir qualsevol nom, àlies o ID al seu ID d'ESPN únic
+NAME_OR_ID_TO_ESPN_ID: dict[str, str] = {}
+for espn_id, data in HYPER_TEAMS_BY_ID.items():
+    NAME_OR_ID_TO_ESPN_ID[espn_id] = espn_id
+    NAME_OR_ID_TO_ESPN_ID[data["key"].lower()] = espn_id
+    for alias in data["aliases"]:
+        NAME_OR_ID_TO_ESPN_ID[alias.lower()] = espn_id
+
+
+def get_espn_id(team_identifier: str | None) -> str | None:
+    """Retorna l'ID d'ESPN a partir d'un nom d'equip, àlies o ID."""
+    if not team_identifier:
+        return None
+    clean = str(team_identifier).strip().lower()
+    return NAME_OR_ID_TO_ESPN_ID.get(clean)
+
+
+def get_team_region(team_identifier: str | None) -> str | None:
+    """Obté la comunitat autònoma a partir de l'ID o nom de l'equip."""
+    espn_id = get_espn_id(team_identifier)
+    if espn_id and espn_id in HYPER_TEAMS_BY_ID:
+        return HYPER_TEAMS_BY_ID[espn_id]["region"]
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Missatges i taunts
+# ---------------------------------------------------------------------------
+
 DERBY_TAUNTS: dict[str, list[str]] = {
     "Andalusia": [
         "Duelo andalús d'urgències. El que perd, la rodada de tapes la paga.",
@@ -85,7 +112,6 @@ DERBY_TAUNTS: dict[str, list[str]] = {
     ],
 }
 
-# Frases de context per a duels directes (prèvia) – placeholders {a}, {b}, {pts_a}, {pts_b}
 DUEL_CONTEXT_TAUNTS: list[str] = [
     "Partit de 6 punts clau! {a} ({pos_a}è, {pts_a} pts) i {b} ({pos_b}è, {pts_b} pts) s'hi juguen molt.",
     "{a} defensa la seva posició a casa i {b} busca assaltar-la. Qui parpelleja primer?",
@@ -93,12 +119,10 @@ DUEL_CONTEXT_TAUNTS: list[str] = [
     "Directe entre els dos! {a} ({pts_a} pts) i {b} ({pts_b} pts). La tensió és màxima.",
 ]
 
-# Emojis de resultat per a post-jornada
 RESULT_EXACT = "🎯"
 RESULT_SIGN  = "🟡"
 RESULT_WRONG = "❌"
 
-# Comentaris post-duel (placeholders {winner}, {loser})
 POST_DUEL_COMMENTS: list[str] = [
     "Victòria i ple de {winner} que s'endú el duel directe!",
     "{winner} guanya el mà a mà de la lligueta. {loser} haurà d'esperar revanxa.",
@@ -134,12 +158,13 @@ def _handle(participant: dict) -> str:
     return _esc(participant.get("display_name") or participant.get("username", "?"))
 
 
-def _build_team_to_player(participants: list[dict]) -> dict[str, dict]:
+def _build_espn_id_to_player(participants: list[dict]) -> dict[str, dict]:
+    """Mapeja l'ID d'ESPN de l'equip al perfil del jugador."""
     m: dict[str, dict] = {}
     for p in participants:
-        team = (p.get("hyper_team_id") or "").strip()
-        if team:
-            m[team] = p
+        espn_id = get_espn_id(p.get("hyper_team_id"))
+        if espn_id:
+            m[espn_id] = p
     return m
 
 
@@ -164,37 +189,27 @@ def detect_direct_duels(
     matches: list[dict],
     participants: list[dict],
 ) -> list[dict]:
-    """
-    Detecta duels directes entre companys de la lligueta.
-
-    Retorna llista de dicts:
-        match, player_home, player_away
-    """
-    t2p = _build_team_to_player(participants)
+    """Detecta duels directes entre companys de la lligueta."""
+    t2p = _build_espn_id_to_player(participants)
     duels = []
     for match in matches:
-        home = (match.get("home_team") or "").strip()
-        away = (match.get("away_team") or "").strip()
-        ph = t2p.get(home)
-        pa = t2p.get(away)
+        home_espn_id = get_espn_id(match.get("home_team"))
+        away_espn_id = get_espn_id(match.get("away_team"))
+        
+        ph = t2p.get(home_espn_id) if home_espn_id else None
+        pa = t2p.get(away_espn_id) if away_espn_id else None
+        
         if ph and pa:
             duels.append({"match": match, "player_home": ph, "player_away": pa})
     return duels
 
 
 def detect_derbies(matches: list[dict]) -> list[dict]:
-    """
-    Detecta derbis geogràfics entre equips de la mateixa comunitat.
-
-    Retorna llista de dicts:
-        match, region, taunt
-    """
+    """Detecta derbis geogràfics entre equips de la mateixa comunitat."""
     derbies = []
     for match in matches:
-        home = (match.get("home_team") or "").strip()
-        away = (match.get("away_team") or "").strip()
-        rh = TEAM_REGION.get(home)
-        ra = TEAM_REGION.get(away)
+        rh = get_team_region(match.get("home_team"))
+        ra = get_team_region(match.get("away_team"))
         if rh and rh == ra:
             taunts = DERBY_TAUNTS.get(rh, [f"Derbi de {rh}!"])
             derbies.append({"match": match, "region": rh, "taunt": random.choice(taunts)})
@@ -242,34 +257,28 @@ def format_prejornada_message(
     participants: list[dict],
     rankings: list[dict],
 ) -> str:
-    """
-    Genera el missatge de prèvia de jornada per a Telegram (HTML).
-
-    Format:
-      🚨 PRÈVIA JORNADA N 🚨
-      🔥 <Equip local> ({handle_local}) 🆚 <Equip visitant> ({handle_visitant})
-        > Context del duel (punts, posició…)
-      ⚽ LA RESTA DE LA TROPA:
-        * Equip A vs Equip B ({handle})
-      📊 Recordeu que teniu fins a 1 hora abans…
-    """
-    t2p = _build_team_to_player(participants)
+    """Genera el missatge de prèvia de jornada per a Telegram (HTML)."""
+    t2p = _build_espn_id_to_player(participants)
     derby_set = {id(m["match"]) for m in detect_derbies(matches)}
 
-    featured: list[dict] = []   # partits destacats (duel directe o derbi)
-    rest: list[dict] = []       # resta de partits
+    featured: list[dict] = []
+    rest: list[dict] = []
 
     for match in matches:
-        home = (match.get("home_team") or "").strip()
-        away = (match.get("away_team") or "").strip()
-        ph = t2p.get(home)
-        pa = t2p.get(away)
+        home_espn_id = get_espn_id(match.get("home_team"))
+        away_espn_id = get_espn_id(match.get("away_team"))
+        
+        ph = t2p.get(home_espn_id) if home_espn_id else None
+        pa = t2p.get(away_espn_id) if away_espn_id else None
+        
         is_duel = bool(ph and pa)
         is_derby = id(match) in derby_set
 
         if is_duel or is_derby:
-            featured.append({"match": match, "player_home": ph, "player_away": pa,
-                              "is_duel": is_duel, "is_derby": is_derby})
+            featured.append({
+                "match": match, "player_home": ph, "player_away": pa,
+                "is_duel": is_duel, "is_derby": is_derby
+            })
         else:
             rest.append({"match": match, "player_home": ph, "player_away": pa})
 
@@ -290,12 +299,10 @@ def format_prejornada_message(
 
         lines.append(f"🔥 <b>{home_label} 🆚 {away_label}</b>")
 
-        # Context del duel directe
         if item["is_duel"] and ph and pa:
             ctx = _duel_context(ph, pa, rankings)
             lines.append(f"  {ctx}")
 
-        # Afegim nota de derbi si escau
         if item["is_derby"]:
             derby_info = next(
                 (d for d in detect_derbies([m]) if d["match"] is m), None
@@ -343,37 +350,14 @@ def format_postjornada_message(
     rankings_after: list[dict],
     predictions: list[dict],
 ) -> str:
-    """
-    Genera el missatge de resultats post-jornada per a Telegram (HTML).
+    """Genera el missatge de resultats post-jornada per a Telegram (HTML)."""
+    t2p = _build_espn_id_to_player(participants)
 
-    Format:
-      🏁 RESULTATS JORNADA N 🏁
-      🔥 <home> ({handle_h}) 🆚 <away> ({handle_a})
-        > Resultat real: G-G | @handle: G-G (+X pts emoji) | @handle: G-G (+X pts emoji)
-        > Comentari del duel
-      ⚽ LA RESTA DE LA TROPA:
-        * home vs away ({handle}): Real G-G | Pronòstic: G-G (+X pts emoji)
-      📊 ESTAT DE LA LLIGUETA:
-        * Top 3: …
-        * Cua: …
-
-    Paràmetres
-    ----------
-    matches         : partits amb home_goals i away_goals (None = no jugat, s'omet).
-    participants    : jugadors.
-    rankings_before : classificació ABANS de la jornada (per calcular moviments).
-    rankings_after  : classificació DESPRÉS de la jornada.
-    predictions     : llista de dicts {username, match_key, pred_home, pred_away}.
-    """
-    t2p = _build_team_to_player(participants)
-
-    # Mapa de prediccions: (username, match_key) → pred
     pred_map: dict[tuple[str, str], dict] = {}
     for pred in predictions:
         key = (pred.get("username", ""), pred.get("match_key", ""))
         pred_map[key] = pred
 
-    # Partits amb resultat
     played = [
         m for m in matches
         if m.get("home_goals") is not None and m.get("away_goals") is not None
@@ -385,16 +369,17 @@ def format_postjornada_message(
             "<i>Encara no hi ha resultats disponibles.</i>"
         )
 
-    # Classifiquem partits en destacats i resta (igual que a la prèvia)
     derby_matches = {id(m["match"]) for m in detect_derbies(played)}
     featured: list[dict] = []
     rest: list[dict] = []
 
     for match in played:
-        home = (match.get("home_team") or "").strip()
-        away = (match.get("away_team") or "").strip()
-        ph = t2p.get(home)
-        pa = t2p.get(away)
+        home_espn_id = get_espn_id(match.get("home_team"))
+        away_espn_id = get_espn_id(match.get("away_team"))
+
+        ph = t2p.get(home_espn_id) if home_espn_id else None
+        pa = t2p.get(away_espn_id) if away_espn_id else None
+
         is_duel = bool(ph and pa)
         is_derby = id(match) in derby_matches
         entry = {
@@ -411,7 +396,6 @@ def format_postjornada_message(
     lines.append("")
 
     def _match_result_line(match: dict, ph: dict | None, pa: dict | None) -> list[str]:
-        """Genera les línies de resultat per a un partit."""
         mk = match.get("match_key", "")
         rh = match.get("home_goals", 0)
         ra = match.get("away_goals", 0)
@@ -451,7 +435,6 @@ def format_postjornada_message(
         for rl in _match_result_line(m, ph, pa):
             lines.append(rl)
 
-        # Comentari del duel directe
         if item["is_duel"] and ph and pa:
             rh = m.get("home_goals", 0)
             ra = m.get("away_goals", 0)
@@ -484,7 +467,6 @@ def format_postjornada_message(
                 comment = random.choice(POST_DUEL_COMMENTS).format(
                     winner=winner_handle, loser=loser_handle
                 )
-                # Afegim nota sobre punts si hi ha diferència
                 if pts_h != pts_a:
                     best_handle = handle_h if pts_h >= pts_a else handle_a
                     worst_handle = handle_a if pts_h >= pts_a else handle_h
@@ -508,7 +490,6 @@ def format_postjornada_message(
             ra = m.get("away_goals", 0)
             mk = m.get("match_key", "")
 
-            # Etiqueta del partit
             player = ph or pa
             if ph and pa:
                 part_label = f"{home_name} ({_handle(ph)}) vs {away_name} ({_handle(pa)})"
@@ -520,7 +501,6 @@ def format_postjornada_message(
 
             result_str = f"Real <b>{rh}-{ra}</b>"
 
-            # Prediccions dels jugadors involucrats
             pred_parts: list[str] = []
             for p in [ph, pa]:
                 if not p:
@@ -562,4 +542,3 @@ def format_postjornada_message(
             lines.append(f"  • Cua: {' | '.join(bottom3_parts)}")
 
     return "\n".join(lines)
-
