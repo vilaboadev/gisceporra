@@ -470,17 +470,31 @@ def format_prejornada_message(
 def format_postjornada_message(
     round_number: int,
     matches: list[dict],
-    participants: list,
+    participants: list[dict],
     rankings_before: list[dict],
-    rankings: list[dict],
-    predictions: list[dict]
+    rankings_after: list[dict],
+    predictions: list[dict],
+    postponed_matches: list[dict] | None = None
 ) -> str:
     """
-    Construeix el text en format Markdown per al missatge de Post-Jornada.
-    Inclou avís automàtic de partits o resultats pendents si hi ha menys d'11 partits.
+    Construeix el text en format HTML per al missatge de Post-Jornada.
+    Calcula punts per partit, pronòstics dels jugadors, duels directes i resum de la lligueta.
     """
+    if postponed_matches is None:
+        postponed_matches = []
+
+    t2p = _build_espn_id_to_player(participants)
+    
+    # Mapeig ràpid de pronòstics: (username, match_key) -> prediction_dict
+    pred_map = {
+        (p.get("username", ""), p.get("match_key", "")): p 
+        for p in predictions
+    }
+
+    featured, rest = _categorize_matches(matches, t2p)
+
     lines = []
-    lines.append(f"🏆 *RESUM POST-JORNADA {round_number}* 🏆\n")
+    lines.append(f"🏆 <b>RESUM POST-JORNADA {round_number}</b> 🏆\n")
 
     # ---------------------------------------------------------------------------
     # DETECCIONS I AVÍS DE PARTITS FALTANTS (< 11)
@@ -493,65 +507,20 @@ def format_postjornada_message(
             if m.get("away_team"):
                 equips_jugats.add(m.get("away_team"))
 
-        # Detectem quins participants tenen el seu equip sense jugar
         jugadors_pendents = []
         for p in participants:
-            # Compatibilitat tant si el participant és un dict com un objecte/Dataclass
             equip = getattr(p, "equip", None) if hasattr(p, "equip") else (p.get("equip") if isinstance(p, dict) else None)
             nom = getattr(p, "nom", None) if hasattr(p, "nom") else (p.get("nom") if isinstance(p, dict) else None)
             
             if equip and equip not in equips_jugats:
                 jugadors_pendents.append(f"{nom} ({equip})")
 
-        lines.append(f"⚠️ *Atenció:* No s'ha trobat el resultat real de tots els partits d'aquesta jornada (trobats: {len(matches)}/11).")
+        lines.append(f"⚠️ <b>Atenció:</b> S'han processat {len(matches)}/11 partits d'aquesta jornada.")
         if jugadors_pendents:
-            lines.append(f"• Sense punts aquesta setmana per partit pendent: {', '.join(jugadors_pendents)}")
+            lines.append(f"• Partits pendents de jugadors: {', '.join(jugadors_pendents)}")
         lines.append("")
 
-    # ---------------------------------------------------------------------------
-    # RESULTATS DELS PARTITS
-    # ---------------------------------------------------------------------------
-    lines.append("⚽ *Resultats dels partits:*")
-    matches_sorted = sorted(matches, key=lambda x: str(x.get("match_date") or ""))
-    for m in matches_sorted:
-        home = m.get("home_team", "Local")
-        away = m.get("away_team", "Visitant")
-        gh = m.get("home_goals", "-")
-        ga = m.get("away_goals", "-")
-        lines.append(f"• {home} {gh} - {ga} {away}")
-    lines.append("")
-
-    # ---------------------------------------------------------------------------
-    # CLASSIFICACIÓ I PUNTUACIONS
-    # ---------------------------------------------------------------------------
-    lines.append("📊 *Classificació General:*")
-    
-    # Ordenar jugadors per punts totals descendents
-    rankings_sorted = sorted(
-        rankings,
-        key=lambda x: x.get("points", 0) if isinstance(x, dict) else getattr(x, "points", 0),
-        reverse=True
-    )
-
-    for idx, r in enumerate(rankings_sorted, 1):
-        nom = r.get("participant_name") or r.get("nom") if isinstance(r, dict) else getattr(r, "nom", "Jugador")
-        pts = r.get("points") if isinstance(r, dict) else getattr(r, "points", 0)
-        
-        # Icona per als 3 primers
-        medalla = ""
-        if idx == 1:
-            medalla = "🥇 "
-        elif idx == 2:
-            medalla = "🥈 "
-        elif idx == 3:
-            medalla = "🥉 "
-
-        lines.append(f"{idx}. {medalla}*{nom}*: {pts} pts")
-
-    lines.append("\n¡Gràcies a tots per participar! Molta sort per a la pròxima jornada! 🚀")
-
-    return "\n".join(lines)
-
+    # Helper intern per a generar la línia de resultat i punts
     def _match_result_line(match: dict, ph: dict | None, pa: dict | None) -> list[str]:
         mk = match.get("match_key", "")
         rh = match.get("home_goals", 0)
@@ -578,6 +547,9 @@ def format_postjornada_message(
             )
         return result_lines
 
+    # ---------------------------------------------------------------------------
+    # PARTITS DESTACATS I DUELS
+    # ---------------------------------------------------------------------------
     for item in featured:
         m = item["match"]
         home_name = _esc(m.get("home_team", "?"))
@@ -630,6 +602,9 @@ def format_postjornada_message(
 
         lines.append("")
 
+    # ---------------------------------------------------------------------------
+    # LA RESTA DE PARTITS
+    # ---------------------------------------------------------------------------
     if rest:
         lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
         for item in rest:
@@ -673,6 +648,9 @@ def format_postjornada_message(
             lines.append(f"  • {part_label}: {suffix}")
         lines.append("")
 
+    # ---------------------------------------------------------------------------
+    # PARTITS APLAÇATS
+    # ---------------------------------------------------------------------------
     if postponed_matches:
         lines.append("⚠️ <b>PARTITS APLAÇATS EN AQUESTA JORNADA:</b>")
         for pm in postponed_matches:
@@ -691,6 +669,9 @@ def format_postjornada_message(
             lines.append(f"  • {h_name} vs {a_name}{aff_str} — <i>S'actualitzarà quan es jugui.</i>")
         lines.append("")
 
+    # ---------------------------------------------------------------------------
+    # ESTAT DE LA LLIGUETA (CLASSIFICACIÓ)
+    # ---------------------------------------------------------------------------
     if rankings_after:
         lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>")
 
@@ -698,7 +679,7 @@ def format_postjornada_message(
         bottom3 = rankings_after[-3:] if len(rankings_after) > 3 else []
 
         top3_parts = [
-            f"{idx + 1}r {_handle(r)} ({r.get('puntos', 0)} pts)"
+            f"{idx + 1}r {_handle(r)} ({r.get('puntos', r.get('points', 0))} pts)"
             for idx, r in enumerate(top3)
         ]
         lines.append(f"  • Top 3: {' | '.join(top3_parts)}")
@@ -706,10 +687,12 @@ def format_postjornada_message(
         if bottom3:
             total = len(rankings_after)
             bottom3_parts = [
-                f"{total - len(bottom3) + idx + 1}è {_handle(r)} ({r.get('puntos', 0)} pts)"
+                f"{total - len(bottom3) + idx + 1}è {_handle(r)} ({r.get('puntos', r.get('points', 0))} pts)"
                 for idx, r in enumerate(bottom3)
             ]
             lines.append(f"  • Cua: {' | '.join(bottom3_parts)}")
+
+    lines.append("\n¡Gràcies a tots per participar! Molta sort per a la pròxima jornada! 🚀")
 
     return "\n".join(lines)
 
@@ -717,7 +700,6 @@ def format_postjornada_message(
 # ---------------------------------------------------------------------------
 # Missatge especial per a la recuperació d'un PARTIT APLAÇAT
 # ---------------------------------------------------------------------------
-
 def format_postponed_match_update_message(
     round_number: int,
     match: dict,
