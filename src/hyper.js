@@ -7,7 +7,7 @@
 
 import { calculateHyperMatchPoints, getHyperBadgeColor, calculateHyperUserTotal } from './hyper-scoring.js';
 import { getTeamInfo, getTeamBadgeUrl, HYPER_TEAMS } from './hyper-teams.js';
-import HYPER_JORNADES_SCHEDULE from './schedule.json' with { type: 'json' };
+import HYPER_JORNADES_SCHEDULE from './data/schedule.json' with { type: 'json' };
 export { HYPER_JORNADES_SCHEDULE };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
