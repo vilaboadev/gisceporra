@@ -531,25 +531,30 @@ def format_postjornada_message(
     lines.append(f"🏆 <b>RESUM POST-JORNADA {round_number}</b> 🏆\n")
 
     # ---------------------------------------------------------------------------
-    # AVÍS DE PARTITS FALTANTS (< 11)
+    # AVÍS DE PARTITS FALTANTS (< 11) I IDENTIFICACIÓ DELS PENDENTS
     # ---------------------------------------------------------------------------
     if len(matches) < 11:
+        lines.append(f"⚠️ <b>Atenció:</b> S'han processat {len(matches)}/11 partits d'aquesta jornada.")
+        
+        # Identifiquem quins equips ja tenen partit processat
         equips_jugats = set()
         for m in matches:
             if m.get("home_team"): equips_jugats.add(m.get("home_team"))
             if m.get("away_team"): equips_jugats.add(m.get("away_team"))
 
-        jugadors_pendents = []
+        # Cerquem quins jugadors tenen el seu equip pendent de jugar
+        pendents = []
         for p in participants:
-            equip = getattr(p, "equip", None) if hasattr(p, "equip") else (p.get("equip") if isinstance(p, dict) else None)
-            nom = getattr(p, "nom", None) if hasattr(p, "nom") else (p.get("nom") if isinstance(p, dict) else None)
+            # Obtenim l'equip de l'objecte o diccionari
+            equip = p.get("hyper_team_id") or p.get("equip") if isinstance(p, dict) else getattr(p, "equip", None)
+            nom_equip = p.get("team_name") or p.get("equip_nom") if isinstance(p, dict) else getattr(p, "team_name", None)
             
-            if equip and equip not in equips_jugats:
-                jugadors_pendents.append(f"{nom} ({equip})")
+            if nom_equip and nom_equip not in equips_jugats:
+                handle = _handle(p)
+                pendents.append(f"<b>{nom_equip}</b> ({handle})")
 
-        lines.append(f"⚠️ <b>Atenció:</b> S'han processat {len(matches)}/11 partits d'aquesta jornada.")
-        if jugadors_pendents:
-            lines.append(f"• Partits pendents de jugadors: {', '.join(jugadors_pendents)}")
+        if pendents:
+            lines.append(f"⏳ <b>Partits/Equips pendents:</b> {', '.join(pendents)}")
         lines.append("")
 
     # Helper intern per línies de resultat i pronòstic
@@ -653,27 +658,31 @@ def format_postjornada_message(
         lines.append("")
 
     # ---------------------------------------------------------------------------
-    # 4. CLASSIFICACIÓ GENERAL
+    # 4. CLASSIFICACIÓ GENERAL (PODI I DESCENS)
     # ---------------------------------------------------------------------------
     if rankings_after:
-        lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>")
+        lines.append("📊 <b>ESTAT DE LA LLIGUETA:</b>\n")
 
-        top3 = rankings_after[:3]
-        bottom3 = rankings_after[-3:] if len(rankings_after) > 3 else []
+        # 🥇 PODI (TOP 3)
+        podi_emojis = ["🥇", "🥈", "🥉"]
+        lines.append("🏆 <b>Podi de la Jornada:</b>")
+        for idx, r in enumerate(rankings_after[:3]):
+            emoji = podi_emojis[idx] if idx < len(podi_emojis) else "•"
+            pts = r.get("puntos", r.get("points", 0))
+            lines.append(f"  {emoji} {idx + 1}r {_handle(r)} — <b>{pts} pts</b>")
 
-        top3_parts = [
-            f"{idx + 1}r {_handle(r)} ({r.get('puntos', r.get('points', 0))} pts)"
-            for idx, r in enumerate(top3)
-        ]
-        lines.append(f"  • Top 3: {' | '.join(top3_parts)}")
+        # 🔻 ZONA DE DESCENS (3 ÚLTIMS - 1a RFEF)
+        if len(rankings_after) > 3:
+            total_jugadors = len(rankings_after)
+            descens = rankings_after[-3:] # Agafem els 3 últims
+            
+            lines.append("\n🔻 <b>Zona de Descens (1a RFEF):</b>")
+            for idx, r in enumerate(descens):
+                pos = total_jugadors - len(descens) + idx + 1
+                pts = r.get("puntos", r.get("points", 0))
+                lines.append(f"  ⚠️ {pos}è {_handle(r)} — <b>{pts} pts</b>")
 
-        if bottom3:
-            total = len(rankings_after)
-            bottom3_parts = [
-                f"{total - len(bottom3) + idx + 1}è {_handle(r)} ({r.get('puntos', r.get('points', 0))} pts)"
-                for idx, r in enumerate(bottom3)
-            ]
-            lines.append(f"  • Cua: {' | '.join(bottom3_parts)}")
+        lines.append("")
 
     lines.append("\n¡Gràcies a tots per participar! Molta sort per a la pròxima jornada! 🚀")
 
