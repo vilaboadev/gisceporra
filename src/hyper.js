@@ -187,6 +187,8 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
 
 /**
  * Sincronitza els resultats finalitzats d'ESPN a la taula `hyper_results` de Supabase.
+ * Inclou la columna `jornada`, calculada a partir de la posició del partit al calendari
+ * complet (grups de 11 partits per jornada).
  * @param {object} dbClient Client de Supabase
  * @returns {Promise<boolean>}
  */
@@ -199,21 +201,27 @@ export async function syncHyperResults(dbClient) {
     const finishedMatches = matches.filter(m => m.intHomeScore != null && m.intAwayScore != null);
     if (finishedMatches.length === 0) return false;
 
-    const rowsToUpsert = finishedMatches.map(m => ({
-      match_key: String(m.idEvent),
-      home_team: m.strHomeTeam,
-      away_team: m.strAwayTeam,
-      home_goals: parseInt(m.intHomeScore, 10),
-      away_goals: parseInt(m.intAwayScore, 10),
-      match_date: m.strDate || null,
-    }));
+    const indexMap = new Map(matches.map((m, i) => [m, i]));
+    const rowsToUpsert = finishedMatches.map(m => {
+      const idx = indexMap.get(m) ?? 0;
+      const jornada = Math.floor(idx / 11) + 1;
+      return {
+        match_key: String(m.idEvent),
+        home_team: m.strHomeTeam,
+        away_team: m.strAwayTeam,
+        home_goals: parseInt(m.intHomeScore, 10),
+        away_goals: parseInt(m.intAwayScore, 10),
+        match_date: m.strDate || null,
+        jornada,
+      };
+    });
 
     const { error } = await dbClient
       .from('hyper_results')
       .upsert(rowsToUpsert, { onConflict: 'match_key' });
 
     if (error) {
-      console.error('Error sincronitzant hyper_results des d’ESPN:', error);
+      console.error('Error sincronitzant hyper_results des d\'ESPN:', error);
       return false;
     }
     return true;

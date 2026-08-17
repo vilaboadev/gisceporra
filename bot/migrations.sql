@@ -75,14 +75,17 @@ ORDER BY puntos DESC;
 ALTER TABLE hyper_results
   ADD COLUMN IF NOT EXISTS jornada INTEGER;
 
--- Migració de dades existents: infereix la jornada des del prefix de match_key
--- (ex: "5_Granada_Oviedo" → 5). Sols s'aplica a files amb jornada NULL, per la
--- qual cosa és segur re-executar. Les files noves han d'incloure jornada explícitament
--- en el INSERT ja que no hi ha cap columna generada ni trigger que ho faci automàticament.
-UPDATE hyper_results
-  SET jornada = CAST(SPLIT_PART(match_key, '_', 1) AS INTEGER)
-  WHERE jornada IS NULL
-    AND match_key ~ '^[0-9]+_';
+-- Migració de dades existents: com que match_key conté l'ID d'ESPN (numèric sense
+-- prefix de jornada), no es pot inferir automàticament. Cal fer un UPDATE manual
+-- per a cada jornada indicant el rang de dates corresponent. Exemple per a jornada 1:
+--
+--   UPDATE hyper_results
+--     SET jornada = 1
+--     WHERE jornada IS NULL
+--       AND match_date BETWEEN '2026-08-17' AND '2026-08-18';
+--
+-- A partir d'ara, la funció syncHyperResults de l'app web ja inclou jornada
+-- en cada upsert, de manera que les noves files s'ompliran automàticament.
 
 
 -- -----------------------------------------------------------------------------
