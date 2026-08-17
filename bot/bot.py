@@ -19,7 +19,7 @@ Lògica automàtica (mode "auto"):
 
 Variables d'entorn (GitHub Secrets o .env):
   SUPABASE_URL          – URL del projecte Supabase  (compartit amb l'app web)
-  SUPABASE_KEY          – clau anon/service_role      (compartit amb l'app web)
+  SUPABASE_ANON_KEY          – clau anon/service_role      (compartit amb l'app web)
   TELEGRAM_BOT_TOKEN    – token del bot (@BotFather)
   TELEGRAM_CHAT_ID      – ID del grup / canal de Telegram
   BOT_MODE              – "auto" | "previa" | "postjornada" (defecte: "auto")
@@ -52,12 +52,12 @@ log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Càrrega de variables d'entorn
-# (mateixos secrets SUPABASE_URL / SUPABASE_KEY que usa l'app web)
+# (mateixos secrets SUPABASE_URL / SUPABASE_ANON_KEY que usa l'app web)
 # ---------------------------------------------------------------------------
 load_dotenv()
 
 SUPABASE_URL       = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY       = os.environ.get("SUPABASE_KEY", "")
+SUPABASE_ANON_KEY  = os.environ.get("SUPABASE_ANON_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 BOT_MODE           = os.environ.get("BOT_MODE", "auto").strip().lower()
@@ -69,10 +69,10 @@ FORCE_SEND         = os.environ.get("FORCE_SEND", "false").strip().lower() == "t
 # Connexió a Supabase
 # ---------------------------------------------------------------------------
 def get_supabase_client() -> Client:
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        log.error("SUPABASE_URL o SUPABASE_KEY no configurats.")
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        log.error("SUPABASE_URL o SUPABASE_ANON_KEY no configurats.")
         sys.exit(1)
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    return create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
 # ---------------------------------------------------------------------------
