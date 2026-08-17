@@ -68,15 +68,32 @@ ORDER BY puntos DESC;
 
 
 -- -----------------------------------------------------------------------------
--- 4. Vista `bot_jornada_view`
+-- 4. Nova columna `jornada` a `hyper_results`
+--    Permet filtrar els partits directament per número de jornada sense dependre
+--    del format de match_key. Cal omplir-la en inserir o actualitzar resultats.
+-- -----------------------------------------------------------------------------
+ALTER TABLE hyper_results
+  ADD COLUMN IF NOT EXISTS jornada INTEGER;
+
+-- Migració de dades existents: infereix la jornada des del prefix de match_key
+-- (ex: "5_Granada_Oviedo" → 5). Sols s'aplica a files amb jornada NULL, per la
+-- qual cosa és segur re-executar. Les files noves han d'incloure jornada explícitament
+-- en el INSERT ja que no hi ha cap columna generada ni trigger que ho faci automàticament.
+UPDATE hyper_results
+  SET jornada = CAST(SPLIT_PART(match_key, '_', 1) AS INTEGER)
+  WHERE jornada IS NULL
+    AND match_key ~ '^[0-9]+_';
+
+
+-- -----------------------------------------------------------------------------
+-- 5. Vista `bot_jornada_view`
 --    Creuament de partits, participants i prediccions per jornada.
 --    El bot la pot usar per generar els missatges sense fer múltiples crides.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW bot_jornada_view AS
 SELECT
   hr.match_key,
-  -- Número de jornada extret del prefix de match_key (ex: "5_Granada_Oviedo" → 5)
-  CAST(SPLIT_PART(hr.match_key, '_', 1) AS INTEGER) AS jornada,
+  hr.jornada,
   hr.home_team,
   hr.away_team,
   hr.match_date,

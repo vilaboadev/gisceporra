@@ -90,9 +90,10 @@ def fetch_current_round(client: Client, mode: str) -> int:
     if mode == "previa":
         resp = (
             client.table("hyper_results")
-            .select("match_key")
+            .select("jornada")
             .is_("home_goals", "null")
-            .order("match_date")
+            .not_.is_("jornada", "null")
+            .order("jornada")
             .limit(1)
             .execute()
         )
@@ -100,18 +101,16 @@ def fetch_current_round(client: Client, mode: str) -> int:
         # Post-jornada: la jornada màxima amb almenys un resultat
         resp = (
             client.table("hyper_results")
-            .select("match_key")
+            .select("jornada")
             .not_.is_("home_goals", "null")
-            .order("match_date", desc=True)
+            .not_.is_("jornada", "null")
+            .order("jornada", desc=True)
             .limit(1)
             .execute()
         )
 
-    if resp.data:
-        mk: str = resp.data[0]["match_key"]
-        parts = mk.split("_")
-        if parts[0].isdigit():
-            return int(parts[0])
+    if resp.data and resp.data[0].get("jornada") is not None:
+        return int(resp.data[0]["jornada"])
 
     log.warning("No s'ha pogut detectar la jornada automàticament. S'usarà jornada 1.")
     return 1
@@ -126,14 +125,6 @@ def _parse_match_date(match: dict) -> date | None:
         return date.fromisoformat(raw[:10])
     except ValueError:
         return None
-
-
-def _round_number_from_key(match_key: str) -> int | None:
-    """Extreu el número de jornada d'un match_key amb format '{n}_...'."""
-    parts = match_key.split("_")
-    if parts[0].isdigit():
-        return int(parts[0])
-    return None
 
 
 def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
@@ -152,7 +143,8 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
 
     resp = (
         client.table("hyper_results")
-        .select("match_key, match_date, home_goals, away_goals")
+        .select("jornada, match_date, home_goals, away_goals")
+        .not_.is_("jornada", "null")
         .order("match_date")
         .execute()
     )
@@ -161,9 +153,9 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
     # Agrupar per jornada
     rounds: dict[int, list[dict]] = {}
     for m in all_matches:
-        rn = _round_number_from_key(m.get("match_key", ""))
+        rn = m.get("jornada")
         if rn is not None:
-            rounds.setdefault(rn, []).append(m)
+            rounds.setdefault(int(rn), []).append(m)
 
     actions: list[tuple[str, int]] = []
 
@@ -231,30 +223,11 @@ def mark_sent(client: Client, round_number: int, mode: str) -> None:
 
 
 def fetch_matches(client: Client, round_number: int) -> list[dict]:
-    """Partits de la jornada indicada, filtrant per match_date (inclou home_goals i away_goals)."""
-    # Primer obtenim les match_keys i dates associades a la jornada
-    prefix = f"{round_number}_"
-    keys_resp = (
-        client.table("hyper_results")
-        .select("match_key, match_date")
-        .like("match_key", f"{prefix}%")
-        .execute()
-    )
-    rows = keys_resp.data or []
-    if not rows:
-        return []
-    match_keys = [r["match_key"] for r in rows if r.get("match_key")]
-    dates = [r["match_date"][:10] for r in rows if r.get("match_date")]
-    if not match_keys or not dates:
-        return []
-    min_date = min(dates)
-    max_date = max(dates)
+    """Partits de la jornada indicada, filtrant per la columna jornada."""
     resp = (
         client.table("hyper_results")
         .select("match_key, home_team, away_team, match_date, home_goals, away_goals")
-        .in_("match_key", match_keys)
-        .gte("match_date", min_date)
-        .lte("match_date", max_date)
+        .eq("jornada", round_number)
         .order("match_date")
         .execute()
     )
