@@ -92,7 +92,7 @@ def fetch_current_round(client: Client, mode: str) -> int:
             client.table("hyper_results")
             .select("match_key")
             .is_("home_goals", "null")
-            .order("match_key")
+            .order("match_date")
             .limit(1)
             .execute()
         )
@@ -102,7 +102,7 @@ def fetch_current_round(client: Client, mode: str) -> int:
             client.table("hyper_results")
             .select("match_key")
             .not_.is_("home_goals", "null")
-            .order("match_key", desc=True)
+            .order("match_date", desc=True)
             .limit(1)
             .execute()
         )
@@ -153,7 +153,7 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
     resp = (
         client.table("hyper_results")
         .select("match_key, match_date, home_goals, away_goals")
-        .order("match_key")
+        .order("match_date")
         .execute()
     )
     all_matches = resp.data or []
@@ -231,12 +231,31 @@ def mark_sent(client: Client, round_number: int, mode: str) -> None:
 
 
 def fetch_matches(client: Client, round_number: int) -> list[dict]:
-    """Partits de la jornada indicada (inclou home_goals i away_goals)."""
+    """Partits de la jornada indicada, filtrant per match_date (inclou home_goals i away_goals)."""
+    # Primer obtenim les match_keys i dates associades a la jornada
     prefix = f"{round_number}_"
+    keys_resp = (
+        client.table("hyper_results")
+        .select("match_key, match_date")
+        .like("match_key", f"{prefix}%")
+        .execute()
+    )
+    rows = keys_resp.data or []
+    if not rows:
+        return []
+    match_keys = [r["match_key"] for r in rows if r.get("match_key")]
+    dates = [r["match_date"][:10] for r in rows if r.get("match_date")]
+    if not match_keys or not dates:
+        return []
+    min_date = min(dates)
+    max_date = max(dates)
     resp = (
         client.table("hyper_results")
         .select("match_key, home_team, away_team, match_date, home_goals, away_goals")
-        .like("match_key", f"{prefix}%")
+        .in_("match_key", match_keys)
+        .gte("match_date", min_date)
+        .lte("match_date", max_date)
+        .order("match_date")
         .execute()
     )
     return resp.data or []
@@ -344,12 +363,17 @@ def fetch_rankings(client: Client) -> list[dict]:
 
 
 def fetch_predictions_for_round(client: Client, round_number: int) -> list[dict]:
-    """Prediccions de tots els jugadors per als partits de la jornada indicada."""
-    prefix = f"{round_number}_"
+    """Prediccions de tots els jugadors per als partits de la jornada indicada, filtrant per match_date."""
+    matches = fetch_matches(client, round_number)
+    if not matches:
+        return []
+    match_keys = [m["match_key"] for m in matches if m.get("match_key")]
+    if not match_keys:
+        return []
     resp = (
         client.table("hyper_predictions")
         .select("username, match_key, pred_home, pred_away")
-        .like("match_key", f"{prefix}%")
+        .in_("match_key", match_keys)
         .execute()
     )
     return resp.data or []
