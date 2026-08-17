@@ -159,12 +159,15 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
     actions: list[tuple[str, int]] = []
 
     for rn, matches in sorted(rounds.items()):
-        # Comprovar si tots els partits tenen resultat
+        total_partits_bdd = len(matches)
+        is_tuesday_or_later = today.weekday() >= 1  # 0=Dilluns, 1=Dimarts...
+
+        # Comprovem si TOTS els partits que tenim registrats tenen resultat
         has_results = all(
             m.get("home_goals") is not None and m.get("away_goals") is not None
             for m in matches
         )
-        
+
         # Comprovar si cap partit té resultat encara
         no_results = all(
             m.get("home_goals") is None and m.get("away_goals") is None
@@ -173,12 +176,7 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
 
         dates = [_parse_match_date(m) for m in matches]
         valid_dates = [d for d in dates if d is not None]
-
-        if not valid_dates:
-            continue
-
-        first_match_date = min(valid_dates)
-        last_match_date = max(valid_dates)
+        first_match_date = min(valid_dates) if valid_dates else None
 
         # ------------------------------------------------------------------
         # 1. PRÈVIA: jornada pendent i el primer partit és avui o demà
@@ -191,14 +189,13 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
         #    a) Condició ideal: Tots els partits s'han jugat (envia diumenge/dilluns al moment)
         #    b) Fallback: Ja és dimarts o posterior a la fi de la jornada (per partits aplaçats)
         # ------------------------------------------------------------------
-        is_past_jornada = today > last_match_date
-        is_tuesday_or_later = today.weekday() >= 1  # 0=Dilluns, 1=Dimarts...
 
-        if has_results:
-            # Tots jugats -> enviar immediatament
+        if has_results and total_partits_bdd == 11:
+            # Condició ideal: Tenim els 11 partits amb resultat -> Enviem ja!
             actions.append(("postjornada", rn))
-        elif is_past_jornada and is_tuesday_or_later and not no_results:
-            # Fallback: Queden partits pendents/aplaçats però ja és dimarts
+        elif has_results and total_partits_bdd > 0 and total_partits_bdd < 11 and is_tuesday_or_later:
+            # Fallback: És dimarts o més tard, i no han arribat els 11 partits.
+            # Donem la jornada per tancada amb els partits que tenim.
             actions.append(("postjornada", rn))
 
     return actions
@@ -396,26 +393,59 @@ def send_telegram_message(text: str) -> None:
         sys.exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Punt d'entrada principal
-# ---------------------------------------------------------------------------
 def _send_for_round(client: Client, mode: str, round_number: int) -> None:
     """Genera i envia el missatge per a una jornada i mode concret."""
-    if already_sent(client, round_number, mode):
-        log.info("Missatge '%s' jornada %s ja enviat. Saltant.", mode, round_number)
+    
+    # 1. Safeguard de duplicats (tret que FORCE_SEND sigui True)
+    if str(FORCE_SEND).lower() != "true" and already_sent(client, round_number, mode):
+        log.info("Missatge '%s' jornada %s ja enviat anteriorment. Saltant.", mode, round_number)
         return
 
+    # 2. Carregar els partits de la jornada des de Supabase
     matches = fetch_matches(client, round_number)
     if not matches:
-        log.warning("No s'han trobat partits per a la jornada %s.", round_number)
+        log.warning("No s'han trobat partits a la BDD per a la jornada %s.", round_number)
         return
 
+    # 3. CANDAU DE SEGURETAT PER A POST-JORNADA (Aplica a 'auto' i manual)
+    if mode == "postjornada" and str(FORCE_SEND).lower() != "true":
+        total_partits = len(matches)
+        
+        # Tots els partits registrats tenen resultat definitiu?
+        partits_completats = all(
+            m.get("home_goals") is not None and m.get("away_goals") is not None
+            for m in matches
+        )
+        
+        # Comprovació del dia de la setmana (0=Dilluns, 1=Dimarts, ..., 6=Diumenge)
+        is_tuesday_or_later = date.today().weekday() >= 1
+
+        # Si hi ha partits a la BDD que encara no tenen gols registrats
+        if not partits_completats:
+            log.warning(
+                "CANCEL·LAT: Queden partits registrats a la BDD per a la jornada %s sense resultat.",
+                round_number
+            )
+            return
+
+        # Si hi ha menys d'11 partits registrats i encara és dilluns o cap de setmana
+        if total_partits < 11 and not is_tuesday_or_later:
+            log.warning(
+                "CANCEL·LAT: S'ha intentat enviar el POST-JORNADA per a la jornada %s, però només "
+                "hi ha %d/11 partits a la BDD i encara és dilluns (o cap de setmana). "
+                "S'esperarà a dimarts per donar la jornada per tancada.",
+                round_number, total_partits
+            )
+            return
+
+    # 4. Carregar participants i classificació
     participants = fetch_participants(client)
     log.info("Participants carregats: %d", len(participants))
 
     rankings = fetch_rankings(client)
     log.info("Classificació carregada: %d jugadors", len(rankings))
 
+    # 5. Formatar el missatge segons el mode
     if mode == "postjornada":
         predictions = fetch_predictions_for_round(client, round_number)
         log.info("Prediccions carregades: %d", len(predictions))
@@ -427,11 +457,15 @@ def _send_for_round(client: Client, mode: str, round_number: int) -> None:
     else:
         message = format_prejornada_message(round_number, matches, participants, rankings)
 
-    log.info("Missatge generat (%d caràcters).", len(message))
+    # 6. Enviament i registre
+    log.info("Missatge generat (%d caràcters). Enviant a Telegram...", len(message))
     send_telegram_message(message)
     mark_sent(client, round_number, mode)
 
 
+# ---------------------------------------------------------------------------
+# Punt d'entrada principal
+# ---------------------------------------------------------------------------
 def main() -> None:
     log.info("Iniciant bot de la Lligueta de 2a Divisió (mode: %s)…", BOT_MODE)
 
