@@ -467,60 +467,90 @@ def format_prejornada_message(
 # ---------------------------------------------------------------------------
 # Missatge de POST-JORNADA
 # ---------------------------------------------------------------------------
-
 def format_postjornada_message(
     round_number: int,
     matches: list[dict],
-    participants: list[dict],
+    participants: list,
     rankings_before: list[dict],
-    rankings_after: list[dict],
-    predictions: list[dict],
-    postponed_matches: list[dict] | None = None,
+    rankings: list[dict],
+    predictions: list[dict]
 ) -> str:
-    """Genera el missatge de resultats post-jornada per a Telegram (HTML)."""
-    t2p = _build_espn_id_to_player(participants)
+    """
+    Construeix el text en format Markdown per al missatge de Post-Jornada.
+    Inclou avís automàtic de partits o resultats pendents si hi ha menys d'11 partits.
+    """
+    lines = []
+    lines.append(f"🏆 *RESUM POST-JORNADA {round_number}* 🏆\n")
 
-    pred_map: dict[tuple[str, str], dict] = {}
-    for pred in predictions:
-        key = (pred.get("username", ""), pred.get("match_key", ""))
-        pred_map[key] = pred
+    # ---------------------------------------------------------------------------
+    # DETECCIONS I AVÍS DE PARTITS FALTANTS (< 11)
+    # ---------------------------------------------------------------------------
+    if len(matches) < 11:
+        equips_jugats = set()
+        for m in matches:
+            if m.get("home_team"):
+                equips_jugats.add(m.get("home_team"))
+            if m.get("away_team"):
+                equips_jugats.add(m.get("away_team"))
 
-    played = [
-        m for m in matches
-        if m.get("home_goals") is not None and m.get("away_goals") is not None
-    ]
+        # Detectem quins participants tenen el seu equip sense jugar
+        jugadors_pendents = []
+        for p in participants:
+            # Compatibilitat tant si el participant és un dict com un objecte/Dataclass
+            equip = getattr(p, "equip", None) if hasattr(p, "equip") else (p.get("equip") if isinstance(p, dict) else None)
+            nom = getattr(p, "nom", None) if hasattr(p, "nom") else (p.get("nom") if isinstance(p, dict) else None)
+            
+            if equip and equip not in equips_jugats:
+                jugadors_pendents.append(f"{nom} ({equip})")
 
-    if not played and not postponed_matches:
-        return (
-            f"🏁 <b>RESULTATS JORNADA {round_number}</b> 🏁\n\n"
-            "<i>Encara no hi ha resultats disponibles.</i>"
-        )
+        lines.append(f"⚠️ *Atenció:* No s'ha trobat el resultat real de tots els partits d'aquesta jornada (trobats: {len(matches)}/11).")
+        if jugadors_pendents:
+            lines.append(f"• Sense punts aquesta setmana per partit pendent: {', '.join(jugadors_pendents)}")
+        lines.append("")
 
-    derby_matches = {id(m["match"]) for m in detect_derbies(played)}
-    featured: list[dict] = []
-    rest: list[dict] = []
-
-    for match in played:
-        home_espn_id = get_espn_id(match.get("home_team"))
-        away_espn_id = get_espn_id(match.get("away_team"))
-
-        ph = t2p.get(home_espn_id) if home_espn_id else None
-        pa = t2p.get(away_espn_id) if away_espn_id else None
-
-        is_duel = bool(ph and pa)
-        is_derby = id(match) in derby_matches
-        entry = {
-            "match": match, "player_home": ph, "player_away": pa,
-            "is_duel": is_duel, "is_derby": is_derby,
-        }
-        if is_duel or is_derby:
-            featured.append(entry)
-        else:
-            rest.append(entry)
-
-    lines: list[str] = []
-    lines.append(f"🏁 <b>RESULTATS JORNADA {round_number}</b> 🏁")
+    # ---------------------------------------------------------------------------
+    # RESULTATS DELS PARTITS
+    # ---------------------------------------------------------------------------
+    lines.append("⚽ *Resultats dels partits:*")
+    matches_sorted = sorted(matches, key=lambda x: str(x.get("match_date") or ""))
+    for m in matches_sorted:
+        home = m.get("home_team", "Local")
+        away = m.get("away_team", "Visitant")
+        gh = m.get("home_goals", "-")
+        ga = m.get("away_goals", "-")
+        lines.append(f"• {home} {gh} - {ga} {away}")
     lines.append("")
+
+    # ---------------------------------------------------------------------------
+    # CLASSIFICACIÓ I PUNTUACIONS
+    # ---------------------------------------------------------------------------
+    lines.append("📊 *Classificació General:*")
+    
+    # Ordenar jugadors per punts totals descendents
+    rankings_sorted = sorted(
+        rankings,
+        key=lambda x: x.get("points", 0) if isinstance(x, dict) else getattr(x, "points", 0),
+        reverse=True
+    )
+
+    for idx, r in enumerate(rankings_sorted, 1):
+        nom = r.get("participant_name") or r.get("nom") if isinstance(r, dict) else getattr(r, "nom", "Jugador")
+        pts = r.get("points") if isinstance(r, dict) else getattr(r, "points", 0)
+        
+        # Icona per als 3 primers
+        medalla = ""
+        if idx == 1:
+            medalla = "🥇 "
+        elif idx == 2:
+            medalla = "🥈 "
+        elif idx == 3:
+            medalla = "🥉 "
+
+        lines.append(f"{idx}. {medalla}*{nom}*: {pts} pts")
+
+    lines.append("\n¡Gràcies a tots per participar! Molta sort per a la pròxima jornada! 🚀")
+
+    return "\n".join(lines)
 
     def _match_result_line(match: dict, ph: dict | None, pa: dict | None) -> list[str]:
         mk = match.get("match_key", "")
