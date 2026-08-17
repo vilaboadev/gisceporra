@@ -68,15 +68,35 @@ ORDER BY puntos DESC;
 
 
 -- -----------------------------------------------------------------------------
--- 4. Vista `bot_jornada_view`
+-- 4. Nova columna `jornada` a `hyper_results`
+--    Permet filtrar els partits directament per número de jornada sense dependre
+--    del format de match_key. Cal omplir-la en inserir o actualitzar resultats.
+-- -----------------------------------------------------------------------------
+ALTER TABLE hyper_results
+  ADD COLUMN IF NOT EXISTS jornada INTEGER;
+
+-- Migració de dades existents: com que match_key conté l'ID d'ESPN (numèric sense
+-- prefix de jornada), no es pot inferir automàticament. Cal fer un UPDATE manual
+-- per a cada jornada indicant el rang de dates corresponent. Exemple per a jornada 1:
+--
+--   UPDATE hyper_results
+--     SET jornada = 1
+--     WHERE jornada IS NULL
+--       AND match_date BETWEEN '2026-08-17' AND '2026-08-18';
+--
+-- A partir d'ara, la funció syncHyperResults de l'app web ja inclou jornada
+-- en cada upsert, de manera que les noves files s'ompliran automàticament.
+
+
+-- -----------------------------------------------------------------------------
+-- 5. Vista `bot_jornada_view`
 --    Creuament de partits, participants i prediccions per jornada.
 --    El bot la pot usar per generar els missatges sense fer múltiples crides.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE VIEW bot_jornada_view AS
 SELECT
   hr.match_key,
-  -- Número de jornada extret del prefix de match_key (ex: "5_Granada_Oviedo" → 5)
-  CAST(SPLIT_PART(hr.match_key, '_', 1) AS INTEGER) AS jornada,
+  hr.jornada,
   hr.home_team,
   hr.away_team,
   hr.match_date,

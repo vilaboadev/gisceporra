@@ -28,6 +28,52 @@ const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/soccer/es
 const ESPN_STANDINGS = 'https://site.web.api.espn.com/apis/v2/sports/soccer/esp.2/standings';
 const ESPN_TEAM_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/teams';
 
+// Literal de referència per a les 42 jornades de la temporada (Segona Divisió / Hypermotion)
+export const HYPER_JORNADES_SCHEDULE = [
+  { jornada: 1, dateRef: '2026-08-16' },
+  { jornada: 2, dateRef: '2026-08-23' },
+  { jornada: 3, dateRef: '2026-08-30' },
+  { jornada: 4, dateRef: '2026-09-06' },
+  { jornada: 5, dateRef: '2026-09-13' },
+  { jornada: 6, dateRef: '2026-09-20' },
+  { jornada: 7, dateRef: '2026-09-27' },
+  { jornada: 8, dateRef: '2026-10-04' },
+  { jornada: 9, dateRef: '2026-10-11' },
+  { jornada: 10, dateRef: '2026-10-18' },
+  { jornada: 11, dateRef: '2026-10-25' },
+  { jornada: 12, dateRef: '2026-11-01' },
+  { jornada: 13, dateRef: '2026-11-08' },
+  { jornada: 14, dateRef: '2026-11-15' },
+  { jornada: 15, dateRef: '2026-11-22' },
+  { jornada: 16, dateRef: '2026-11-29' },
+  { jornada: 17, dateRef: '2026-12-06' },
+  { jornada: 18, dateRef: '2026-12-13' },
+  { jornada: 19, dateRef: '2026-12-20' },
+  { jornada: 20, dateRef: '2027-01-03' },
+  { jornada: 21, dateRef: '2027-01-10' },
+  { jornada: 22, dateRef: '2027-01-17' },
+  { jornada: 23, dateRef: '2027-01-24' },
+  { jornada: 24, dateRef: '2027-01-31' },
+  { jornada: 25, dateRef: '2027-02-07' },
+  { jornada: 26, dateRef: '2027-02-14' },
+  { jornada: 27, dateRef: '2027-02-21' },
+  { jornada: 28, dateRef: '2027-02-28' },
+  { jornada: 29, dateRef: '2027-03-07' },
+  { jornada: 30, dateRef: '2027-03-14' },
+  { jornada: 31, dateRef: '2027-03-21' },
+  { jornada: 32, dateRef: '2027-03-28' },
+  { jornada: 33, dateRef: '2027-04-04' },
+  { jornada: 34, dateRef: '2027-04-11' },
+  { jornada: 35, dateRef: '2027-04-18' },
+  { jornada: 36, dateRef: '2027-04-25' },
+  { jornada: 37, dateRef: '2027-05-02' },
+  { jornada: 38, dateRef: '2027-05-09' },
+  { jornada: 39, dateRef: '2027-05-16' },
+  { jornada: 40, dateRef: '2027-05-23' },
+  { jornada: 41, dateRef: '2027-05-30' },
+  { jornada: 42, dateRef: '2027-06-06' }
+];
+
 const tsdbMemoryCache = new Map();
 let memoryLeagueMatchesCache = null;
 let memoryLeagueMatchesTimestamp = 0;
@@ -186,7 +232,34 @@ export async function getLeagueEventsCache(allTeamIds, { forceRefresh = false } 
 }
 
 /**
+ * Calcula la jornada associada a una data de partit basant-se en el literal de referència.
+ * Assigna la jornada del diumenge més proper a la data del partit.
+ * @param {string} matchDateStr Data en format YYYY-MM-DD
+ * @returns {number} Número de jornada (1-42)
+ */
+function getJornadaFromLiteral(matchDateStr) {
+  if (!matchDateStr) return 1;
+  const matchMs = new Date(matchDateStr).getTime();
+
+  let minDiff = Infinity;
+  let bestJornada = 1;
+
+  for (const item of HYPER_JORNADES_SCHEDULE) {
+    const refMs = new Date(item.dateRef).getTime();
+    const diff = Math.abs(matchMs - refMs);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestJornada = item.jornada;
+    }
+  }
+
+  return bestJornada;
+}
+
+/**
  * Sincronitza els resultats finalitzats d'ESPN a la taula `hyper_results` de Supabase.
+ * Inclou la columna `jornada`, calculada a partir de la posició del partit al calendari
+ * complet (grups de 11 partits per jornada).
  * @param {object} dbClient Client de Supabase
  * @returns {Promise<boolean>}
  */
@@ -199,21 +272,29 @@ export async function syncHyperResults(dbClient) {
     const finishedMatches = matches.filter(m => m.intHomeScore != null && m.intAwayScore != null);
     if (finishedMatches.length === 0) return false;
 
-    const rowsToUpsert = finishedMatches.map(m => ({
-      match_key: String(m.idEvent),
-      home_team: m.strHomeTeam,
-      away_team: m.strAwayTeam,
-      home_goals: parseInt(m.intHomeScore, 10),
-      away_goals: parseInt(m.intAwayScore, 10),
-      match_date: m.strDate || null,
-    }));
+    const indexMap = new Map(matches.map((m, i) => [m, i]));
+    const rowsToUpsert = finishedMatches.map(m => {
+      // Si el partit ja porta la jornada d'origen s'usa, si no la calculem amb el literal
+      const jornada = m.jornada ? Number(m.jornada) : getJornadaFromLiteral(m.strDate);
+      const idx = indexMap.get(m) ?? 0;
+      const jornada = Math.floor(idx / 11) + 1;
+      return {
+        match_key: String(m.idEvent),
+        home_team: m.strHomeTeam,
+        away_team: m.strAwayTeam,
+        home_goals: parseInt(m.intHomeScore, 10),
+        away_goals: parseInt(m.intAwayScore, 10),
+        match_date: m.strDate || null,
+        jornada,
+      };
+    });
 
     const { error } = await dbClient
       .from('hyper_results')
       .upsert(rowsToUpsert, { onConflict: 'match_key' });
 
     if (error) {
-      console.error('Error sincronitzant hyper_results des d’ESPN:', error);
+      console.error('Error sincronitzant hyper_results des d\'ESPN:', error);
       return false;
     }
     return true;
