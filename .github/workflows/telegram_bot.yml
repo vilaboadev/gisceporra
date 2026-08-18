@@ -4,7 +4,7 @@ on:
   # Execució diària: el bot detecta automàticament si cal enviar prèvia o post-jornada.
   # Robust a jornades intersetmanals: comprova cada dia i usa safeguard contra duplicats.
   schedule:
-    - cron: "0 10 * * *"   # cada dia a les 10:00 UTC (12:00 CEST)
+    - cron: "0 08 * * *"   # cada dia a les 08:00 UTC (10:00 CEST)
   # Llançament manual (per testing o recuperació)
   workflow_dispatch:
     inputs:
