@@ -80,9 +80,13 @@ def get_supabase_client() -> Client:
 # ---------------------------------------------------------------------------
 def sync_hyper_results(client: Client) -> None:
     """Sincronitza només la finestra actual (-7 dies a +7 dies) des d'ESPN."""
-    schedule = load_schedule("schedule.json")
+    # Ruta relativa des de bot/bot.py cap a src/data/schedule.json
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    schedule_path = os.path.abspath(os.path.join(base_dir, "..", "src", "data", "schedule.json"))
+
+    schedule = load_schedule(schedule_path)
     if not schedule:
-        log.warning("No s'ha pogut carregar schedule.json per a la sincronització.")
+        log.warning("No s'ha pogut carregar %s per a la sincronització.", schedule_path)
         return
 
     today = date.today()
