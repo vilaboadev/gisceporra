@@ -158,11 +158,14 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
 
     actions: list[tuple[str, int]] = []
 
+    # Trobar la jornada màxima registrada a la BDD
+    max_rn = max(rounds.keys()) if rounds else 0
+
     for rn, matches in sorted(rounds.items()):
         total_partits_bdd = len(matches)
         is_tuesday_or_later = today.weekday() >= 1  # 0=Dilluns, 1=Dimarts...
 
-        # Comprovem si TOTS els partits que tenim registrats tenen resultat
+        # Comprovem si TOTS els partits registrats d'aquesta jornada tenen resultat
         has_results = all(
             m.get("home_goals") is not None and m.get("away_goals") is not None
             for m in matches
@@ -179,7 +182,7 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
         first_match_date = min(valid_dates) if valid_dates else None
 
         # ------------------------------------------------------------------
-        # 1. PRÈVIA: jornada pendent i el primer partit és avui o demà
+        # 1. PRÈVIA (Si la jornada existeix a la BDD sense resultats)
         # ------------------------------------------------------------------
         if no_results and first_match_date in (today, tomorrow):
             if not already_sent(client, rn, "previa"):
@@ -199,6 +202,17 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
             # Donem la jornada per tancada amb els partits que tenim.
             if not already_sent(client, rn, "postjornada"):
                 actions.append(("postjornada", rn))
+
+    # ----------------------------------------------------------------------
+    # FALLBACK PER A PRÈVIA QUAN LA JORNADA SEGÜENT ENCARA NO ÉS A LA BDD:
+    # Si la postjornada de l'última jornada registrada ja s'ha enviat
+    # i no s'ha generat cap acció, proposem la prèvia de la següent jornada (max_rn + 1).
+    # ----------------------------------------------------------------------
+    if not actions and max_rn > 0:
+        if already_sent(client, max_rn, "postjornada"):
+            next_rn = max_rn + 1
+            if not already_sent(client, next_rn, "previa"):
+                actions.append(("previa", next_rn))
 
     return actions
 
