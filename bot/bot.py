@@ -38,7 +38,7 @@ from datetime import date, timedelta
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-from logic import format_prejornada_message, format_postjornada_message
+from logic import load_schedule, get_jornada_from_date, format_prejornada_message, format_postjornada_message
 
 # ---------------------------------------------------------------------------
 # Configuració de logging
@@ -78,6 +78,60 @@ def get_supabase_client() -> Client:
 # ---------------------------------------------------------------------------
 # Obtenció de dades
 # ---------------------------------------------------------------------------
+def sync_hyper_results(client: Client) -> None:
+    """Sincronitza només la finestra actual (-7 dies a +7 dies) des d'ESPN."""
+    schedule = load_schedule("schedule.json")
+    if not schedule:
+        log.warning("No s'ha pogut carregar schedule.json per a la sincronització.")
+        return
+
+    today = date.today()
+    start_date = (today - timedelta(days=7)).strftime("%Y%m%d")
+    end_date = (today + timedelta(days=7)).strftime("%Y%m%d")
+
+    # Petició lleugera: només 2 setmanes al voltant d'avui
+    url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/esp.2/scoreboard?dates={start_date}-{end_date}&limit=50"
+
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        events = resp.json().get("events", [])
+
+        rows = []
+        for e in events:
+            raw_date = e.get("date", "")
+            date_str = raw_date[:10] if raw_date else None
+            j_info = get_jornada_from_date(date_str, schedule)
+
+            comp = e.get("competitions", [{}])[0]
+            competitors = comp.get("competitors", [])
+            home = next((c for c in competitors if c.get("homeAway") == "home"), {})
+            away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+
+            status = e.get("status", {}).get("type", {})
+            is_completed = status.get("completed") is True
+            is_live = status.get("state") == "in"
+
+            home_goals = int(home.get("score", 0)) if (is_completed or is_live) else None
+            away_goals = int(away.get("score", 0)) if (is_completed or is_live) else None
+
+            rows.append({
+                "match_key": str(e.get("id")),
+                "home_team": home.get("team", {}).get("name") or home.get("team", {}).get("displayName", ""),
+                "away_team": away.get("team", {}).get("name") or away.get("team", {}).get("displayName", ""),
+                "home_goals": home_goals,
+                "away_goals": away_goals,
+                "match_date": date_str,
+                "jornada": j_info["jornada"]
+            })
+
+        if rows:
+            client.table("hyper_results").upsert(rows, on_conflict="match_key").execute()
+            log.info("Sincronització lleugera completada: %d partits actualitzats.", len(rows))
+
+    except Exception as exc:
+        log.error("Error en sincronització d'ESPN: %s", exc)
+
 def fetch_current_round(client: Client, mode: str) -> int:
     """Detecta la jornada en curs o retorna ROUND_NUMBER si s'ha especificat."""
     if ROUND_NUMBER:
@@ -138,7 +192,7 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
           2. O BÉ ja és dimarts/posterior a la data de l'últim partit (fallback per partits aplaçats).
     """
     today = date.today()
-    tomorrow = today + timedelta(days=1)
+    max_preview_date = today + timedelta(days=3) # Dijous/Divendres veuen fins a Diumenge/Dilluns
 
     resp = (
         client.table("hyper_results")
@@ -157,9 +211,7 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
             rounds.setdefault(int(rn), []).append(m)
 
     actions: list[tuple[str, int]] = []
-
-    # Trobar la jornada màxima registrada a la BDD
-    max_rn = max(rounds.keys()) if rounds else 0
+    preview_added = False  # Flag per assegurar que NOMÉS afegim UNA prèvia
 
     for rn, matches in sorted(rounds.items()):
         total_partits_bdd = len(matches)
@@ -184,9 +236,10 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
         # ------------------------------------------------------------------
         # 1. PRÈVIA (Si la jornada existeix a la BDD sense resultats)
         # ------------------------------------------------------------------
-        if no_results and first_match_date in (today, tomorrow):
-            if not already_sent(client, rn, "previa"):
+        if no_results and first_match_date and (today <= first_match_date <= max_preview_date):
+            if not preview_added and not already_sent(client, rn, "previa"):
                 actions.append(("previa", rn))
+                preview_added = True
 
         # ------------------------------------------------------------------
         # 2. POST-JORNADA:
@@ -197,22 +250,11 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
             # Condició ideal: Tenim els 11 partits amb resultat -> Enviem ja!
             if not already_sent(client, rn, "postjornada"):
                 actions.append(("postjornada", rn))
-        elif has_results and total_partits_bdd > 0 and total_partits_bdd < 11 and is_tuesday_or_later:
+        elif has_results and 0 < total_partits_bdd < 11 and is_tuesday_or_later:
             # Fallback: És dimarts o més tard, i no han arribat els 11 partits.
             # Donem la jornada per tancada amb els partits que tenim.
             if not already_sent(client, rn, "postjornada"):
                 actions.append(("postjornada", rn))
-
-    # ----------------------------------------------------------------------
-    # FALLBACK PER A PRÈVIA QUAN LA JORNADA SEGÜENT ENCARA NO ÉS A LA BDD:
-    # Si la postjornada de l'última jornada registrada ja s'ha enviat
-    # i no s'ha generat cap acció, proposem la prèvia de la següent jornada (max_rn + 1).
-    # ----------------------------------------------------------------------
-    if not actions and max_rn > 0:
-        if already_sent(client, max_rn, "postjornada"):
-            next_rn = max_rn + 1
-            if not already_sent(client, next_rn, "previa"):
-                actions.append(("previa", next_rn))
 
     return actions
 
@@ -487,6 +529,11 @@ def main() -> None:
 
     client = get_supabase_client()
 
+    # 1. PAS CLAU: Manteniment automàtic de la taula hyper_results
+    log.info("Sincronitzant partits d'ESPN amb Supabase...")
+    sync_hyper_results(client)
+
+    # 2. Execució normal del bot
     if BOT_MODE == "auto":
         # Detecció intel·ligent: envia prèvia/post-jornada segons les dates
         actions = detect_what_to_send(client)
