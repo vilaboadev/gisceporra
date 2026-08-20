@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime
 import json
 import random
-import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -47,35 +47,41 @@ HYPER_TEAMS_BY_ID: dict[str, dict] = {
     "7320": {"key": "Eldense", "region": "Comunitat Valenciana", "aliases": ["eldense", "cd eldense"]},
     "17534": {"key": "Leganes", "region": "Madrid", "aliases": ["leganes", "leganés", "cd leganés", "cd leganes"]},
     "245": {"key": "Tenerife", "region": "Canàries", "aliases": ["tenerife", "cd tenerife"]},
-    "11487": {"key": "Sabadell", "region": "Catalunya", "aliases": ["sabadell", "ce sabadell"]},
+    "11487": {"key": "Sabadell", "region": "Catalunya", "aliases": ["sabadell", "ce sabadell", "cd sabadell"]},
     "131858": {"key": "Celta Fortuna", "region": "Galícia", "aliases": ["celta fortuna", "rc celta fortuna"]},
-    "8447": {"key": "Cordoba", "region": "Andalusia", "aliases": ["cordoba", "còrdova", "córdoba cf", "cordoba cf"]},
+    "8447": {"key": "Cordoba", "region": "Andalusia", "aliases": ["cordoba", "còrdova", "córdoba", "córdoba cf", "cordoba cf"]},
     "20179": {"key": "Andorra", "region": "Catalunya", "aliases": ["andorra", "fc andorra"]},
     "9812": {"key": "Girona", "region": "Catalunya", "aliases": ["girona", "girona fc"]},
     "3747": {"key": "Granada", "region": "Andalusia", "aliases": ["granada", "granada cf"]},
-    "20983": {"key": "Real Sociedad B", "region": "País Basc", "aliases": ["real sociedad b", "real sociedad ii", "real sociedad 2"]},
+    "20983": {"key": "Real Sociedad B", "region": "País Basc", "aliases": ["real sociedad b", "real sociedad ii", "real sociedad 2", "real sociedad b / sanse"]},
     "84": {"key": "Mallorca", "region": "Illes Balears", "aliases": ["mallorca", "rcd mallorca"]},
     "92": {"key": "Oviedo", "region": "Astúries", "aliases": ["oviedo", "real oviedo"]},
-    "3788": {"key": "Sporting", "region": "Astúries", "aliases": ["sporting", "real sporting", "sporting de gijón"]},
+    "3788": {"key": "Sporting", "region": "Astúries", "aliases": ["sporting", "real sporting", "sporting gijon", "sporting gijón", "real sporting de gijón", "sporting de gijón"]},
     "95": {"key": "Valladolid", "region": "Castella i Lleó", "aliases": ["valladolid", "real valladolid", "real valladolid cf"]},
     "3752": {"key": "Eibar", "region": "País Basc", "aliases": ["eibar", "sd eibar"]},
     "6832": {"key": "Almeria", "region": "Andalusia", "aliases": ["almeria", "almería", "ud almería", "ud almeria"]},
     "98": {"key": "Las Palmas", "region": "Canàries", "aliases": ["las palmas", "ud las palmas"]},
 }
 
+def _normalize_text(text: str | None) -> str:
+    """Passa a minúscules i elimina accents/diacrítics."""
+    if not text:
+        return ""
+    text_str = str(text).strip()
+    return unicodedata.normalize('NFD', text_str).encode('ascii', 'ignore').decode('utf-8').lower()
+
 NAME_OR_ID_TO_ESPN_ID: dict[str, str] = {}
 for espn_id, data in HYPER_TEAMS_BY_ID.items():
     NAME_OR_ID_TO_ESPN_ID[espn_id] = espn_id
-    NAME_OR_ID_TO_ESPN_ID[data["key"].lower()] = espn_id
+    NAME_OR_ID_TO_ESPN_ID[_normalize_text(data["key"])] = espn_id
     for alias in data["aliases"]:
-        NAME_OR_ID_TO_ESPN_ID[alias.lower()] = espn_id
-
+        NAME_OR_ID_TO_ESPN_ID[_normalize_text(alias)] = espn_id
 
 def get_espn_id(team_identifier: str | None) -> str | None:
     """Retorna l'ID d'ESPN a partir d'un nom d'equip, àlies o ID."""
     if not team_identifier:
         return None
-    clean = str(team_identifier).strip().lower()
+    clean = _normalize_text(team_identifier)
     return NAME_OR_ID_TO_ESPN_ID.get(clean)
 
 
@@ -252,9 +258,11 @@ def _build_espn_id_to_player(participants: list[dict]) -> dict[str, dict]:
     """Mapeja l'ID d'ESPN de l'equip al perfil del jugador."""
     m: dict[str, dict] = {}
     for p in participants:
-        espn_id = get_espn_id(p.get("hyper_team_id"))
-        if espn_id:
-            m[espn_id] = p
+        raw_id = p.get("hyper_team_id")
+        if raw_id is not None:
+            espn_id = get_espn_id(str(raw_id))
+            if espn_id:
+                m[espn_id] = p
     return m
 
 
