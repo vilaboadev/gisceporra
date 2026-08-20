@@ -182,21 +182,23 @@ def detect_what_to_send(client: Client) -> list[tuple[str, int]]:
         # 1. PRÈVIA: jornada pendent i el primer partit és avui o demà
         # ------------------------------------------------------------------
         if no_results and first_match_date in (today, tomorrow):
-            actions.append(("previa", rn))
+            if not already_sent(client, rn, "previa"):
+                actions.append(("previa", rn))
 
         # ------------------------------------------------------------------
         # 2. POST-JORNADA:
         #    a) Condició ideal: Tots els partits s'han jugat (envia diumenge/dilluns al moment)
         #    b) Fallback: Ja és dimarts o posterior a la fi de la jornada (per partits aplaçats)
         # ------------------------------------------------------------------
-
         if has_results and total_partits_bdd == 11:
             # Condició ideal: Tenim els 11 partits amb resultat -> Enviem ja!
-            actions.append(("postjornada", rn))
+            if not already_sent(client, rn, "postjornada"):
+                actions.append(("postjornada", rn))
         elif has_results and total_partits_bdd > 0 and total_partits_bdd < 11 and is_tuesday_or_later:
             # Fallback: És dimarts o més tard, i no han arribat els 11 partits.
             # Donem la jornada per tancada amb els partits que tenim.
-            actions.append(("postjornada", rn))
+            if not already_sent(client, rn, "postjornada"):
+                actions.append(("postjornada", rn))
 
     return actions
 
