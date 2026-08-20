@@ -86,6 +86,14 @@ def get_team_region(team_identifier: str | None) -> str | None:
         return HYPER_TEAMS_BY_ID[espn_id]["region"]
     return None
 
+def _get_canonical_team_name(team_identifier: str | None) -> str:
+    """Retorna el nom bonic/oficial de l'equip a partir de l'ID o nom raw d'ESPN."""
+    if not team_identifier:
+        return "?"
+    espn_id = get_espn_id(team_identifier)
+    if espn_id and espn_id in HYPER_TEAMS_BY_ID:
+        return HYPER_TEAMS_BY_ID[espn_id]["key"]
+    return _esc(team_identifier)
 
 # ---------------------------------------------------------------------------
 # Gestió de dates i jornada segons calendari JSON
@@ -402,6 +410,7 @@ def format_prejornada_message(
         is_duel = bool(ph and pa)
         is_derby = id(match) in derby_set
 
+        # Només va a "featured" (Dols Directes / Derbis) si és DUEL DIRECTE o DERBI
         if is_duel or is_derby:
             featured.append({
                 "match": match, "player_home": ph, "player_away": pa,
@@ -414,10 +423,11 @@ def format_prejornada_message(
     lines.append(f"🚨 <b>PRÈVIA JORNADA {round_number}</b> 🚨")
     lines.append("")
 
+    # 1. DOLS DIRECTES I DERBIS DESTACATS
     for item in featured:
         m = item["match"]
-        home_name = _esc(m.get("home_team", "?"))
-        away_name = _esc(m.get("away_team", "?"))
+        home_name = _get_canonical_team_name(m.get("home_team"))
+        away_name = _get_canonical_team_name(m.get("away_team"))
         ph = item["player_home"]
         pa = item["player_away"]
 
@@ -439,22 +449,21 @@ def format_prejornada_message(
 
         lines.append("")
 
+    # 2. LA RESTA DE LA TROPA
     if rest:
         lines.append("⚽ <b>LA RESTA DE LA TROPA:</b>")
         for item in rest:
             m = item["match"]
-            home_name = _esc(m.get("home_team", "?"))
-            away_name = _esc(m.get("away_team", "?"))
+            home_name = _get_canonical_team_name(m.get("home_team"))
+            away_name = _get_canonical_team_name(m.get("away_team"))
             ph = item["player_home"]
             pa = item["player_away"]
 
-            parts_str = ""
-            if ph and not pa:
-                parts_str = f" ({_handle(ph)})"
-            elif pa and not ph:
-                parts_str = f" ({_handle(pa)})"
+            # Associem l'usuari exactament a l'equip que li correspon (local o visitant)
+            home_str = f"{home_name} ({_handle(ph)})" if ph else home_name
+            away_str = f"{away_name} ({_handle(pa)})" if pa else away_name
 
-            lines.append(f"  • {home_name} vs {away_name}{parts_str}")
+            lines.append(f"  • {home_str} vs {away_str}")
         lines.append("")
 
     lines.append(
