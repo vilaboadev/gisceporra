@@ -108,14 +108,77 @@ export function espnEventToHyperMatch(e) {
  */
 export async function fetchEspnLeagueMatches() {
   try {
-    const res = await fetch(`${ESPN_SCOREBOARD}?dates=20260801-20270630&limit=300`);
-    if (!res.ok) return [];
-    const json = await res.json();
-    const events = json.events ?? [];
-    return events.map(espnEventToHyperMatch).filter(Boolean);
-  } catch {
+    const months = getEspnMonthsToFetch();
+
+    const responses = await Promise.all(
+      months.map(async month => {
+        const res = await fetch(
+          `${ESPN_SCOREBOARD}?dates=${month}&limit=200`
+        );
+
+        if (!res.ok) {
+          throw new Error(`ESPN ${month}: HTTP ${res.status}`);
+        }
+
+        const json = await res.json();
+        return json.events ?? [];
+      })
+    );
+
+    const unique = new Map();
+
+    for (const events of responses) {
+      for (const event of events) {
+        if (event?.id) {
+          unique.set(String(event.id), event);
+        }
+      }
+    }
+
+    return [...unique.values()]
+      .map(espnEventToHyperMatch)
+      .filter(Boolean)
+      .sort((a, b) => (a.timeMs || 0) - (b.timeMs || 0));
+
+  } catch (err) {
+    console.error('Error carregant calendari ESPN:', err);
     return [];
   }
+}
+
+function getEspnMonthsToFetch(now = new Date()) {
+  const SEASON_START = { year: 2026, month: 8 };
+  const SEASON_END   = { year: 2027, month: 6 };
+
+  const result = [];
+
+  // anterior, actual, siguiente
+  for (const offset of [-1, 0, 1]) {
+    const d = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth() + offset,
+        1
+      )
+    );
+
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth() + 1;
+
+    const afterStart =
+      year > SEASON_START.year ||
+      (year === SEASON_START.year && month >= SEASON_START.month);
+
+    const beforeEnd =
+      year < SEASON_END.year ||
+      (year === SEASON_END.year && month <= SEASON_END.month);
+
+    if (afterStart && beforeEnd) {
+      result.push(`${year}${String(month).padStart(2, '0')}`);
+    }
+  }
+
+  return result;
 }
 
 /**
